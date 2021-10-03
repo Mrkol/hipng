@@ -2,7 +2,7 @@
 
 Being hip and cool means that this project tries to use the most modern and fashionable stuff:
 
- * C++20: coroutines and concepts (and eventually models when cmake support gets better)
+ * C++20: coroutines and concepts (and eventually modules when cmake support gets better)
  * Unified executors
  * Flecs
  * Vulkan
