@@ -1,0 +1,74 @@
+cmake_minimum_required(VERSION 3.20)
+
+CPMAddPackage("gh:SanderMertens/flecs#master")
+
+CPMAddPackage("gh:facebookexperimental/libunifex#main")
+
+CPMAddPackage(
+    GITHUB_REPOSITORY jarro2783/cxxopts
+    VERSION 2.2.1
+    OPTIONS "CXXOPTS_BUILD_EXAMPLES NO" "CXXOPTS_BUILD_TESTS NO" "CXXOPTS_ENABLE_INSTALL YES"
+)
+
+find_package(Vulkan REQUIRED)
+
+CPMAddPackage(
+    NAME GLFW
+    GITHUB_REPOSITORY glfw/glfw
+    GIT_TAG 3.3.4
+    OPTIONS
+        "GLFW_BUILD_TESTS OFF"
+        "GLFW_BUILD_EXAMPLES OFF"
+        "GLFW_BULID_DOCS OFF"
+)
+
+CPMAddPackage(
+    NAME VulkanMemoryAllocator
+    GITHUB_REPOSITORY GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
+    VERSION 2.3.0
+    DOWNLOAD_ONLY YES
+)
+
+if (VulkanMemoryAllocator_ADDED)
+    add_library(VulkanMemoryAllocator INTERFACE)
+    target_include_directories(VulkanMemoryAllocator INTERFACE ${VulkanMemoryAllocator_SOURCE_DIR}/include/)
+endif ()
+
+CPMAddPackage(
+    NAME ImGui
+    GITHUB_REPOSITORY ocornut/imgui
+    VERSION 1.84.2
+    DOWNLOAD_ONLY YES
+)
+
+if (ImGui_ADDED)
+    add_library(DearImGui
+        ${ImGui_SOURCE_DIR}/imgui.cpp ${ImGui_SOURCE_DIR}/imgui_draw.cpp
+        ${ImGui_SOURCE_DIR}/imgui_tables.cpp ${ImGui_SOURCE_DIR}/imgui_widgets.cpp
+        ${ImGui_SOURCE_DIR}/imgui_demo.cpp # TODO: remove
+        ${ImGui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp ${ImGui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp)
+
+    target_include_directories(DearImGui PUBLIC ${ImGui_SOURCE_DIR})
+
+    target_add_shaders(DearImGui
+        ${ImGui_SOURCE_DIR}/backends/vulkan/glsl_shader.frag
+        ${ImGui_SOURCE_DIR}/backends/vulkan/glsl_shader.vert)
+
+    target_link_libraries(DearImGui Vulkan::Vulkan)
+    target_link_libraries(DearImGui glfw)
+endif ()
+
+CPMAddPackage(
+    NAME Assimp
+    GITHUB_REPOSITORY assimp/assimp
+    VERSION 5.0.1
+    OPTIONS
+        "ASSIMP_BUILD_TESTS OFF"
+        "ASSIMP_BUILD_ASSIMP_TOOLS OFF"
+)
+
+CPMAddPackage(
+    NAME spdlog
+    GITHUB_REPOSITORY gabime/spdlog
+    VERSION 1.9.2
+)
