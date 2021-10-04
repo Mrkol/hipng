@@ -25,7 +25,7 @@ CPMAddPackage(
 CPMAddPackage(
     NAME VulkanMemoryAllocator
     GITHUB_REPOSITORY GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
-    VERSION 2.3.0
+    GIT_TAG master
     DOWNLOAD_ONLY YES
 )
 
