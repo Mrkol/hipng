@@ -1,49 +1,19 @@
 #pragma once
 
-#include <vk_mem_alloc.h>
-#include <vulkan/vulkan.hpp>
+#include <flecs.h>
+#include <string_view>
 
-#include "core/WindowSystem.hpp"
+#include "rendering/GlobalRenderer.hpp"
 
 
-constexpr std::size_t MAX_FRAMES_IN_FLIGHT = 2;
-
-struct CVkInstance
+struct CGlobalRendererRef
 {
-    vk::UniqueInstance instance;
+    GlobalRenderer* ref = nullptr;
 };
 
-struct CVkPhysicalDevice
+struct CWindowRendererRef
 {
-    vk::PhysicalDevice physical_device;
+    WindowRenderer* ref = nullptr;
 };
 
-struct CVkDevice
-{
-    vk::UniqueDevice device;
-};
-
-enum class QueueType { Graphics, Transfer, Present };
-
-template<QueueType>
-struct CVkQueue
-{
-    uint32_t idx;
-    vk::Queue queue;
-};
-
-// This can be added to windows to create a surface and a swapchain for them
-struct TRequiresVulkan {};
-
-struct CKHRSurface
-{
-    vk::UniqueSurfaceKHR surface;
-};
-
-struct CVmaAllocator
-{
-    std::unique_ptr<std::remove_pointer_t<VmaAllocator>, void(*)(VmaAllocator)> allocator_{nullptr, nullptr};
-};
-
-
-void register_vulkan_systems(flecs::world& world, std::string_view app_name);
+std::unique_ptr<GlobalRenderer> register_vulkan_systems(flecs::world& world, std::string_view app_name);

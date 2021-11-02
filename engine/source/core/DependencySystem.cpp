@@ -1,7 +1,5 @@
 #include "core/DependencySystem.hpp"
 
-#include <spdlog/spdlog.h>
-
 #include "core/EnginePhases.hpp"
 
 

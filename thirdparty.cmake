@@ -5,6 +5,11 @@ CPMAddPackage("gh:SanderMertens/flecs#master")
 CPMAddPackage("gh:facebookexperimental/libunifex#main")
 
 CPMAddPackage(
+    GITHUB_REPOSITORY Naios/function2
+    GIT_TAG 4.2.0
+)
+
+CPMAddPackage(
     GITHUB_REPOSITORY jarro2783/cxxopts
     VERSION 2.2.1
     OPTIONS "CXXOPTS_BUILD_EXAMPLES NO" "CXXOPTS_BUILD_TESTS NO" "CXXOPTS_ENABLE_INSTALL YES"
@@ -13,9 +18,9 @@ CPMAddPackage(
 find_package(Vulkan REQUIRED)
 
 CPMAddPackage(
-    NAME GLFW
+    NAME glfw3
     GITHUB_REPOSITORY glfw/glfw
-    GIT_TAG 3.3.4
+    GIT_TAG 3.3.2
     OPTIONS
         "GLFW_BUILD_TESTS OFF"
         "GLFW_BUILD_EXAMPLES OFF"

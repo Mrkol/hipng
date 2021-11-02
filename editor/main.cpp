@@ -1,7 +1,21 @@
-#include <core/Engine.hpp>
+#include "core/Engine.hpp"
+#include "core/EnginePhases.hpp"
+#include "core/WindowSystem.hpp"
 
 
 int main(int argc, char** argv)
 {
-    return Engine(argc, argv).run();
+    Engine engine(argc, argv);
+
+    engine.world().system<>()
+        .kind(engine.world().component<TGameLoopStarting>())
+        .iter([](flecs::iter it)
+        {
+            it.world().entity("MainWindow")
+                .set<CWindow>(create_window("HipNg"))
+                .add<TMainWindow>()
+                .add<TRequiresVulkan>();
+        });
+
+    return engine.run();
 }
