@@ -17,11 +17,11 @@ class StaticScope
     {
         void set_value() &&
         {
-	        std::move(*this).set_done();
+            std::move(*this).set_done();
         }
 
         [[noreturn]] void set_error(auto) noexcept
-    	{
+        {
             std::terminate();
         }
 
@@ -53,7 +53,7 @@ class StaticScope
         {
             scope.storage_[slot].op.construct_with([&]()
                 {
-            		return unifex::connect(std::move(sender_to_spawn), DoneReceiver{&scope, slot});
+                    return unifex::connect(std::move(sender_to_spawn), DoneReceiver{&scope, slot});
                 });
 
             unifex::start(scope.storage_[slot].op.get());
@@ -81,7 +81,7 @@ class StaticScope
         template <template <typename...> class Variant>
         using error_types = Variant<>;
         
-		static constexpr bool sends_done = false;
+        static constexpr bool sends_done = false;
 
 
         template<class Sender2>
@@ -138,7 +138,7 @@ class StaticScope
         template <template <typename...> class Variant>
         using error_types = Variant<>;
         
-		static constexpr bool sends_done = false;
+        static constexpr bool sends_done = false;
 
         template<class Receiver>
         friend auto tag_invoke(unifex::tag_t<unifex::connect>, AllFinishedSender sender, Receiver&& receiver)

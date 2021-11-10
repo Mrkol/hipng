@@ -15,9 +15,9 @@ class BlockingThreadPool
     struct Op : OpBase
     {
         Op(BlockingThreadPool& p, auto&& rec)
-	        : OpBase(this)
-    		, pool{p}
-			, receiver{std::forward<decltype(rec)>(rec)}
+            : OpBase(this)
+            , pool{p}
+            , receiver{std::forward<decltype(rec)>(rec)}
         {
         }
 
@@ -33,7 +33,7 @@ class BlockingThreadPool
 
         void cancel()
         {
-	        std::move(receiver).set_done();
+            std::move(receiver).set_done();
         }
 
         BlockingThreadPool& pool;
@@ -44,15 +44,15 @@ public:
     {
         struct Sender
         {
-	        template <
-	            template <typename...> class Variant,
-	            template <typename...> class Tuple>
-	        using value_types = Variant<Tuple<>>;
+            template <
+                template <typename...> class Variant,
+                template <typename...> class Tuple>
+            using value_types = Variant<Tuple<>>;
 
-	        template <template <typename...> class Variant>
-	        using error_types = Variant<>;
+            template <template <typename...> class Variant>
+            using error_types = Variant<>;
             
-			static constexpr bool sends_done = true;
+            static constexpr bool sends_done = true;
 
             template<unifex::receiver_of<> Receiver>
             auto connect(Receiver&& r)
@@ -67,7 +67,7 @@ public:
 
         Sender schedule() const
         {
-	        return Sender{pool_};
+            return Sender{pool_};
         }
 
         friend bool operator==(const Scheduler& a, const Scheduler& b) = default;
@@ -81,7 +81,7 @@ public:
     {
         NG_ASSERT(thread_count > 0);
         threads_.reserve(thread_count);
-    	for (std::size_t i = 0; i < thread_count; ++i)
+        for (std::size_t i = 0; i < thread_count; ++i)
         {
             threads_.emplace_back([this]() { thread_loop(); });
         }
@@ -91,7 +91,7 @@ public:
 
     void request_stop() noexcept
     {
-	    stop_requested_.store(true, std::memory_order::relaxed);
+        stop_requested_.store(true, std::memory_order::relaxed);
         tasks_available_.notify_one();
     }
 
@@ -105,24 +105,24 @@ private:
 
     void thread_loop()
     {
-	    while (!stop_requested_.load(std::memory_order::relaxed))
-	    {
+        while (!stop_requested_.load(std::memory_order::relaxed))
+        {
             std::unique_lock lock{mtx_};
             while (!stop_requested_.load(std::memory_order::relaxed)
                 && !awaiting_start_.wake_one(lock))
             {
-	            tasks_available_.wait(lock);
+                tasks_available_.wait(lock);
             }
-	    }
+        }
 
         std::unique_lock lock{mtx_};
         multi_cancel_all(lock, awaiting_start_);
     }
     
 private:
-	std::vector<std::jthread> threads_;
-	std::mutex mtx_;
-	std::condition_variable tasks_available_;
+    std::vector<std::jthread> threads_;
+    std::mutex mtx_;
+    std::condition_variable tasks_available_;
     std::atomic<bool> stop_requested_{false};
     ToStartLot awaiting_start_;
 };

@@ -9,7 +9,7 @@
 
 namespace detail
 {
-	template<class T>
+    template<class T>
     concept HasCancel = requires(T t) { t.cancel(); };
 }
 
@@ -28,14 +28,14 @@ public:
         explicit OpBase(Derived*)
             : wake_type_erased {+[](OpBase* op, WakeArgs... args) { static_cast<Derived*>(op)->wake(args...); }}
             , cancel_type_erased {
-	                +[](OpBase* op)
-	                {
-	                    if constexpr (detail::HasCancel<Derived>)
-	                    {
-						   static_cast<Derived*>(op)->cancel();
-	                    }
-	                }
-	            }
+                    +[](OpBase* op)
+                    {
+                        if constexpr (detail::HasCancel<Derived>)
+                        {
+                           static_cast<Derived*>(op)->cancel();
+                        }
+                    }
+                }
         {
         }
 
@@ -132,7 +132,7 @@ private:
 
 // Cancels several lots at a time
 template<class T, class... Lots> // TODO: require Lots to be actual lots
-	requires (sizeof...(Lots) > 0)
+    requires (sizeof...(Lots) > 0)
 void multi_cancel_all(std::unique_lock<T>& lock, Lots&... lots)
 {
     std::array currents{lots.first_...};
@@ -144,7 +144,7 @@ void multi_cancel_all(std::unique_lock<T>& lock, Lots&... lots)
 
     for (auto current : currents)
     {
-		while (current != nullptr)
+        while (current != nullptr)
         {
             auto next = current->next;
             // wake might delete current

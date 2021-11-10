@@ -52,7 +52,7 @@ int Engine::run()
 
 unifex::task<int> Engine::main_event_loop()
 {
-	co_await unifex::schedule(g_engine.main_scheduler());
+    co_await unifex::schedule(g_engine.main_scheduler());
 
     spdlog::info("Game loop starting");
 
@@ -65,9 +65,9 @@ unifex::task<int> Engine::main_event_loop()
     bool should_quit = false;
 
     StaticScope<MAX_INFLIGHT_FRAMES, unifex::task<void>> rendering_scope(MAX_INFLIGHT_FRAMES);
-	while (!should_quit)
+    while (!should_quit)
     {
-		co_await reschedule;
+        co_await reschedule;
         glfwPollEvents();
 
         auto this_tick = Clock::now();

@@ -5,7 +5,5 @@
 class ViewPerspective
 {
 public:
-
 private:
-
 };

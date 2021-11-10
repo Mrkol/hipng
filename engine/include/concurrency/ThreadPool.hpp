@@ -22,16 +22,16 @@ class ThreadPool
     struct Op : OpBase
     {
         Op(ThreadPool& p, auto&& rec, std::size_t tid)
-	        : OpBase(this)
-    		, pool{p}
-			, receiver{std::forward<decltype(rec)>(rec)}
-			, requested_thread{tid}
+            : OpBase(this)
+            , pool{p}
+            , receiver{std::forward<decltype(rec)>(rec)}
+            , requested_thread{tid}
         {
         }
 
         void start() noexcept
         {
-			pool.enqueue(this, requested_thread);
+            pool.enqueue(this, requested_thread);
         }
         
         void wake()
@@ -41,7 +41,7 @@ class ThreadPool
 
         void cancel()
         {
-	        std::move(receiver).set_done();
+            std::move(receiver).set_done();
         }
 
         ThreadPool& pool;
@@ -54,15 +54,15 @@ public:
     {
         struct Sender
         {
-	        template <
-	            template <typename...> class Variant,
-	            template <typename...> class Tuple>
-	        using value_types = Variant<Tuple<>>;
+            template <
+                template <typename...> class Variant,
+                template <typename...> class Tuple>
+            using value_types = Variant<Tuple<>>;
 
-	        template <template <typename...> class Variant>
-	        using error_types = Variant<>;
+            template <template <typename...> class Variant>
+            using error_types = Variant<>;
             
-			static constexpr bool sends_done = true;
+            static constexpr bool sends_done = true;
 
             template<unifex::receiver_of<> Receiver>
             auto connect(Receiver&& r)
@@ -79,12 +79,12 @@ public:
 
         Sender schedule() const
         {
-	        return Sender{THREAD_NONE, pool_};
+            return Sender{THREAD_NONE, pool_};
         }
 
         Sender schedule_with_subscheduler() const
         {
-	        return Sender{pool_->this_thread_idx_, pool_};
+            return Sender{pool_->this_thread_idx_, pool_};
         }
 
         friend Sender tag_invoke(unifex::tag_t<unifex::schedule_with_subscheduler>, const Scheduler& scheduler)
