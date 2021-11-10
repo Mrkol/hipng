@@ -62,9 +62,9 @@ WindowRenderer::WindowRenderer(vk::PhysicalDevice physical_device, vk::Device de
     , device_{device}
     , allocator_{allocator}
     , surface_(std::move(surface))
+    , resolution_provider_{std::move(resolution_provider)}
     , present_queue_{queues.present, device.getQueue(queues.present, 0)}
     , graphics_queue_{queues.graphics, device.getQueue(queues.graphics, 0)}
-    , resolution_provider_{std::move(resolution_provider)}
 {
 }
 

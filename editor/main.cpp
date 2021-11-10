@@ -11,7 +11,7 @@ int main(int argc, char** argv)
         .kind(engine.world().component<TGameLoopStarting>())
         .iter([](flecs::iter it)
         {
-            it.world().entity("MainWindow")
+            (void) it.world().entity("MainWindow")
                 .set<CWindow>(create_window("HipNg"))
                 .add<TMainWindow>()
                 .add<TRequiresVulkan>();

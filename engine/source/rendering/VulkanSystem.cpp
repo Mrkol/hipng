@@ -73,7 +73,7 @@ std::unique_ptr<GlobalRenderer> register_vulkan_systems(flecs::world& world, std
                     surface,
                     vk::ObjectDestroy<vk::Instance, vk::DispatchLoaderStatic>{renderer->getInstance()}
                 };
-            e.remove<TRequiresVulkan>()
+            (void) e.remove<TRequiresVulkan>()
                     .set<CWindowRendererRef>({
                         renderer->makeWindowRenderer(
                                 std::move(unique_surface),

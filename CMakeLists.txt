@@ -13,6 +13,8 @@ if(NOT DEFINED CMAKE_SUPPRESS_DEVELOPER_WARNINGS)
      set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS 1 CACHE INTERNAL "No dev warnings")
 endif()
 
+set(BUILD_SHARED_LIBS off)
+
 # Get the magical CPM tool thingy
 set(CPM_DOWNLOAD_VERSION 0.34.0)
 
@@ -68,5 +70,6 @@ endfunction()
 
 include(thirdparty.cmake)
 
-add_subdirectory(engine)
-add_subdirectory(editor)
+add_subdirectory("engine")
+add_subdirectory("editor")
+add_subdirectory("test")

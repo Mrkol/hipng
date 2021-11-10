@@ -2,10 +2,11 @@
 
 #include <string_view>
 #include <spdlog/spdlog.h>
+#include "util/TargetInfo.hpp"
 
 
 // TODO: remove when clang stops being a piece of shit
-#if defined(__clang__)
+#if NG_COMPILER_CLANG
 
 namespace detail
 {
@@ -71,7 +72,9 @@ template<typename... Ts>
 
 // Fires only in the debug build
 #ifndef NDEBUG
-#define NG_ASSERT(cond, msg) ((void) (cond));
+#define NG_ASSERTF(cond, msg) do { ((void) (cond)); ((void) (msg); } while (false)
+#define NG_ASSERT(cond) do { ((void) (cond)); } while (false)
 #else
-#define NG_ASSERT(cond, msg, ...) NG_VERIFY(cond, msg, ##__VA_ARGS__)
+#define NG_ASSERTF(cond, msg, ...) NG_VERIFY(cond, msg, ##__VA_ARGS__)
+#define NG_ASSERT(cond) NG_VERIFY(cond, "")
 #endif

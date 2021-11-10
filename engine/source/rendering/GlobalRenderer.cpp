@@ -10,6 +10,7 @@
 #include <unifex/when_all.hpp>
 
 #include "util/Assert.hpp"
+#include "core/EngineHandle.hpp"
 
 
 constexpr std::array DEVICE_EXTENSIONS {static_cast<const char*>(VK_KHR_SWAPCHAIN_EXTENSION_NAME)};
@@ -105,8 +106,8 @@ void GlobalRenderer::initializeDevice(vk::SurfaceKHR surface)
         float queue_priority = 1.0f;
 
         std::unordered_set<uint32_t> unique_families{
-                queueFamilyIndices_.graphics_queue_idx,
-                queueFamilyIndices_.presentation_queue_idx
+            queueFamilyIndices_.graphics_queue_idx,
+            queueFamilyIndices_.presentation_queue_idx
         };
 
         queue_create_infos.reserve(unique_families.size());
@@ -124,28 +125,28 @@ void GlobalRenderer::initializeDevice(vk::SurfaceKHR surface)
     features.geometryShader = true;
 
     device_ = physical_device_.createDeviceUnique(vk::DeviceCreateInfo{
-            {},
-            static_cast<uint32_t>(queue_create_infos.size()), queue_create_infos.data(),
-            0, nullptr,
-            static_cast<uint32_t>(DEVICE_EXTENSIONS.size()), DEVICE_EXTENSIONS.data(),
-            &features
+        {},
+        static_cast<uint32_t>(queue_create_infos.size()), queue_create_infos.data(),
+        0, nullptr,
+        static_cast<uint32_t>(DEVICE_EXTENSIONS.size()), DEVICE_EXTENSIONS.data(),
+        &features
     });
 
     VmaAllocatorCreateInfo info{
-            .flags = {},
-            .physicalDevice = physical_device_,
-            .device = device_.get(),
+        .flags = {},
+        .physicalDevice = physical_device_,
+        .device = device_.get(),
 
-            .preferredLargeHeapBlockSize = {},
-            .pAllocationCallbacks = {},
-            .pDeviceMemoryCallbacks = {},
-            .frameInUseCount = MAX_FRAMES_IN_FLIGHT,
-            .pHeapSizeLimit = {},
-            .pVulkanFunctions = {},
-            .pRecordSettings = {},
+        .preferredLargeHeapBlockSize = {},
+        .pAllocationCallbacks = {},
+        .pDeviceMemoryCallbacks = {},
+        .frameInUseCount = MAX_FRAMES_IN_FLIGHT,
+        .pHeapSizeLimit = {},
+        .pVulkanFunctions = {},
+        .pRecordSettings = {},
 
-            .instance = instance_.get(),
-            .vulkanApiVersion = VK_API_VERSION_1_2, // TODO: global constant for this
+        .instance = instance_.get(),
+        .vulkanApiVersion = VK_API_VERSION_1_2, // TODO: global constant for this
     };
 
     VmaAllocator allocator;
@@ -156,23 +157,7 @@ void GlobalRenderer::initializeDevice(vk::SurfaceKHR surface)
 
 unifex::task<void> GlobalRenderer::renderFrame(float delta_seconds)
 {
-    command_queue_.sync_wait(unifex::just());
-
-    {
-        // kill me
-        unifex::task<void> accum =
-                []() -> unifex::task<void> { co_return; }(); // NOLINT(readability-static-accessed-through-instance)
-        for (auto& window_renderer : window_renderers_)
-        {
-            accum = [&]() -> unifex::task<void> // NOLINT(readability-static-accessed-through-instance)
-                {
-                    co_await unifex::when_all(window_renderer->renderFrame(delta_seconds), std::move(accum));
-                    co_return;
-                }();
-        }
-
-        co_await std::move(accum);
-    }
+    co_await unifex::schedule(g_engine.main_scheduler());
 
     co_return;
 }
