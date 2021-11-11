@@ -9,9 +9,7 @@
 #include "rendering/primitives/UniqueVmaImage.hpp"
 
 
-constexpr std::size_t MAX_FRAMES_IN_FLIGHT = 2;
-
-using ResolutionProvider = fu2::unique_function<vk::Extent2D()>;
+using ResolutionProvider = fu2::unique_function<vk::Extent2D() const>;
 
 class WindowRenderer
 {
@@ -26,9 +24,27 @@ public:
         VmaAllocator allocator, vk::UniqueSurfaceKHR surface, RequiredQueues queues,
         ResolutionProvider resolution_provider);
 
-    void recreateSwapchain();
+    vk::ImageView acquire_next();
 
-    unifex::task<void> renderFrame(float delta_seconds);
+    unifex::task<void> render_frame(float delta_seconds);
+
+
+private:
+    struct SwapchainElement
+    {
+        vk::Image image;
+        vk::UniqueImageView image_view;
+        vk::Fence image_fence;
+    };
+    struct SwapchainData
+    {
+        vk::UniqueSwapchainKHR swapchain;
+        vk::Format format;
+        vk::Extent2D extent;
+        std::vector<SwapchainElement> elements;
+    };
+
+    SwapchainData create_swapchain() const;
 
 private:
     vk::PhysicalDevice physical_device_;
@@ -43,29 +59,5 @@ private:
         vk::Queue queue;
     } present_queue_, graphics_queue_;
 
-
-    struct SwapchainElement
-    {
-        vk::Image image;
-        vk::UniqueImageView image_view;
-        vk::Fence image_fence;
-        vk::UniqueFramebuffer main_framebuffer;
-        vk::UniqueFramebuffer gui_framebuffer;
-        vk::UniqueCommandPool command_pool;
-        vk::UniqueCommandBuffer command_buffer;
-    };
-
-    struct Swapchain
-    {
-        vk::UniqueSwapchainKHR swapchain;
-        vk::Format format;
-        vk::Extent2D extent;
-
-        UniqueVmaImage depthbuffer;
-        vk::UniqueImageView depthbuffer_view;
-
-        vk::UniqueRenderPass render_pass;
-
-        std::vector<SwapchainElement> elements;
-    } swapchain_;
+    SwapchainData current_swapchain_;
 };
