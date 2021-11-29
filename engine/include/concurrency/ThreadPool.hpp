@@ -36,12 +36,12 @@ class ThreadPool
         
         void wake()
         {
-            std::move(receiver).set_value();
+            unifex::set_value(std::move(receiver));
         }
 
         void cancel()
         {
-            std::move(receiver).set_done();
+            unifex::set_done(std::move(receiver));
         }
 
         ThreadPool& pool;
@@ -52,6 +52,7 @@ class ThreadPool
 public:
     class Scheduler
     {
+    public:
         struct Sender
         {
             template <
@@ -105,6 +106,8 @@ public:
 
     void request_stop() noexcept;
 
+    ~ThreadPool() noexcept;
+
 private:
     static thread_local std::size_t this_thread_idx_;
 
@@ -127,8 +130,10 @@ private:
         std::condition_variable_any any_awaiting;
     };
 
+
+
 private:
-    std::vector<std::jthread> threads_;
+    std::vector<std::thread> threads_;
     std::vector<ThreadData> thread_data_;
     std::atomic<std::size_t> current_thread_round_robin_{0};
     std::atomic<bool> stop_requested_{false};

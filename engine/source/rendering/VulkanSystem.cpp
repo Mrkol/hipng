@@ -42,19 +42,22 @@ std::unique_ptr<GlobalRenderer> register_vulkan_systems(flecs::world& world, std
 
     std::string name_copy(app_name);
     vk::ApplicationInfo application_info{
-        name_copy.c_str(), 1u,
-        "Vulkan.hpp", 1u,
-        VK_API_VERSION_1_2
+        .pApplicationName = name_copy.c_str(),
+        .applicationVersion = 1u,
+        .pEngineName = "Vulkan.hpp",
+        .engineVersion = 1u,
+        .apiVersion = VK_API_VERSION_1_2,
     };
 
     uint32_t glfwExtCount;
     auto glfwExts = glfwGetRequiredInstanceExtensions(&glfwExtCount);
 
-    auto result = std::make_unique<GlobalRenderer>(
-            application_info,
-            std::span{VALIDATION_LAYERS.begin(), VALIDATION_LAYERS.end()},
-            std::span{glfwExts, glfwExts + glfwExtCount}
-        );
+    auto result = std::make_unique<GlobalRenderer>(GlobalRendererCreateInfo{
+            .app_info = application_info,
+            .layers = std::span{VALIDATION_LAYERS.begin(), VALIDATION_LAYERS.end()},
+            .extensions = std::span{glfwExts, glfwExts + glfwExtCount},
+            .max_frames_in_flight = 2
+        });
 
     world.set<CGlobalRendererRef>({result.get()});
 
@@ -67,7 +70,7 @@ std::unique_ptr<GlobalRenderer> register_vulkan_systems(flecs::world& world, std
 
             VkSurfaceKHR surface;
             auto res = glfwCreateWindowSurface(renderer->getInstance(), window.glfw_window.get(), nullptr, &surface);
-            NG_VERIFY(res == VK_SUCCESS, "Unable to create VK surface!");
+            NG_VERIFYF(res == VK_SUCCESS, "Unable to create VK surface!");
 
             auto unique_surface = vk::UniqueSurfaceKHR{
                     surface,
@@ -77,7 +80,8 @@ std::unique_ptr<GlobalRenderer> register_vulkan_systems(flecs::world& world, std
                     .set<CWindowRendererRef>({
                         renderer->makeWindowRenderer(
                                 std::move(unique_surface),
-                                [window = window.glfw_window.get()]() mutable
+                                [window = window.glfw_window.get()]()
+                                    -> vk::Extent2D
                                 {
                                     int width, height;
                                     glfwGetFramebufferSize(window, &width, &height);

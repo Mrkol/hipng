@@ -108,3 +108,11 @@ void ThreadPool::run_task()
         this_thread_data.any_awaiting.wait(lock);
     }
 }
+
+ThreadPool::~ThreadPool() noexcept
+{
+    for (auto& thread : threads_)
+    {
+        thread.join();
+    }
+}

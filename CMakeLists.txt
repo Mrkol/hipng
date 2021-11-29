@@ -43,6 +43,11 @@ set(CPM_USE_LOCAL_PACKAGES True)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -v")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++ -lc++abi")
+endif()
+
 
 find_program(glslang_validator glslangValidator)
 
@@ -67,7 +72,7 @@ function(target_add_shaders TARGET)
     add_dependencies(${TARGET} ${custom_target_name})
 endfunction()
 
-
+find_package(Threads)
 include(thirdparty.cmake)
 
 add_subdirectory("engine")

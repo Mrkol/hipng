@@ -1,5 +1,8 @@
 #pragma once
 
+#include <utility>
+#include <optional>
+
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.hpp>
 #include <unifex/task.hpp>
@@ -11,22 +14,35 @@
 
 using ResolutionProvider = fu2::unique_function<vk::Extent2D() const>;
 
+struct WindowRendererCreateInfo
+{
+    vk::PhysicalDevice physical_device;
+    vk::Device device;
+    VmaAllocator allocator;
+    vk::UniqueSurfaceKHR surface;
+    ResolutionProvider resolution_provider;
+    vk::Queue present_queue;
+    // Reminder: this must be an all-in-one graphics + present queue
+    uint32_t queue_family;
+};
+
 class WindowRenderer
 {
 public:
-    struct RequiredQueues
+    explicit WindowRenderer(WindowRendererCreateInfo info);
+
+    struct SwapchainImage
     {
-        uint32_t present;
-        uint32_t graphics;
+        vk::ImageView view;
+        vk::Semaphore available;
+        uint32_t index;
     };
 
-    WindowRenderer(vk::PhysicalDevice physical_device, vk::Device device,
-        VmaAllocator allocator, vk::UniqueSurfaceKHR surface, RequiredQueues queues,
-        ResolutionProvider resolution_provider);
+    std::optional<SwapchainImage> acquireNext();
+    bool present(vk::Semaphore wait, uint32_t index);
 
-    vk::ImageView acquire_next();
-
-    unifex::task<void> render_frame(float delta_seconds);
+    // Should only be called when the present queue is free of present requests
+    void recreateSwapchain();
 
 
 private:
@@ -44,7 +60,7 @@ private:
         std::vector<SwapchainElement> elements;
     };
 
-    SwapchainData create_swapchain() const;
+    SwapchainData createSwapchain() const;
 
 private:
     vk::PhysicalDevice physical_device_;
@@ -54,10 +70,8 @@ private:
 
     ResolutionProvider resolution_provider_;
 
-    struct Queue {
-        uint32_t index;
-        vk::Queue queue;
-    } present_queue_, graphics_queue_;
+    uint32_t queue_family_;
+    vk::Queue present_queue_;
 
     SwapchainData current_swapchain_;
 };

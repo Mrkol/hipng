@@ -28,12 +28,12 @@ class BlockingThreadPool
         
         void wake()
         {
-            std::move(receiver).set_value();
+            unifex::set_value(std::move(receiver));
         }
 
         void cancel()
         {
-            std::move(receiver).set_done();
+            unifex::set_done(std::move(receiver));
         }
 
         BlockingThreadPool& pool;
@@ -95,6 +95,14 @@ public:
         tasks_available_.notify_one();
     }
 
+    ~BlockingThreadPool() noexcept
+    {
+        for (auto& thread : threads_)
+        {
+            thread.join();
+        }
+    }
+
 private:
     void enqueue(OpBase* op)
     {
@@ -120,7 +128,7 @@ private:
     }
     
 private:
-    std::vector<std::jthread> threads_;
+    std::vector<std::thread> threads_;
     std::mutex mtx_;
     std::condition_variable tasks_available_;
     std::atomic<bool> stop_requested_{false};

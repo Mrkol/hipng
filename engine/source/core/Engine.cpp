@@ -22,7 +22,7 @@ EngineHandle g_engine{nullptr};
 EngineBase::EngineBase()
 {
     auto retcode = glfwInit();
-    NG_VERIFY(retcode == GLFW_TRUE, "Unable to initialize GLFW!");
+    NG_VERIFYF(retcode == GLFW_TRUE, "Unable to initialize GLFW!");
 }
 
 EngineBase::~EngineBase()

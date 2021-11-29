@@ -55,23 +55,21 @@ vk::Extent2D chose_swap_extent(const vk::SurfaceCapabilitiesKHR& capabilities, v
 
 
 
-WindowRenderer::WindowRenderer(vk::PhysicalDevice physical_device, vk::Device device,
-        VmaAllocator allocator, vk::UniqueSurfaceKHR surface, RequiredQueues queues,
-        ResolutionProvider resolution_provider)
-    : physical_device_{physical_device}
-    , device_{device}
-    , allocator_{allocator}
-    , surface_(std::move(surface))
-    , resolution_provider_{std::move(resolution_provider)}
-    , present_queue_{queues.present, device.getQueue(queues.present, 0)}
-    , graphics_queue_{queues.graphics, device.getQueue(queues.graphics, 0)}
+WindowRenderer::WindowRenderer(WindowRendererCreateInfo info)
+    : physical_device_{info.physical_device}
+    , device_{info.device}
+    , allocator_{info.allocator}
+    , surface_(std::move(info.surface))
+    , resolution_provider_{std::move(info.resolution_provider)}
+    , present_queue_{info.present_queue}
+    , queue_family_{info.queue_family}
 {
 }
 
-vk::ImageView WindowRenderer::acquire_next()
+auto WindowRenderer::acquireNext() -> std::optional<SwapchainImage>
 {
     auto res = device_.acquireNextImage2KHR(vk::AcquireNextImageInfoKHR{
-        .swapchain = current_swapchain_.swapchain,
+        .swapchain = current_swapchain_.swapchain.get(),
         .timeout = 1000000,
         .semaphore = {},
         .fence = {},
@@ -80,15 +78,44 @@ vk::ImageView WindowRenderer::acquire_next()
 
     if (res.result == vk::Result::eErrorOutOfDateKHR)
     {
-	    
+	    return std::nullopt;
     }
     else if (res.result != vk::Result::eSuccess && res.result != vk::Result::eSuboptimalKHR)
     {
 	    throw std::runtime_error("Swapchain lost!");
     }
+
+    return SwapchainImage{current_swapchain_.elements[res.value].image_view.get(), vk::Semaphore{}, res.value};
 }
 
-WindowRenderer::SwapchainData WindowRenderer::create_swapchain() const
+bool WindowRenderer::present(vk::Semaphore wait, uint32_t index)
+{
+    auto res = present_queue_.presentKHR(vk::PresentInfoKHR{
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &wait,
+            .swapchainCount = 1,
+            .pSwapchains = &current_swapchain_.swapchain.get(),
+            .pImageIndices = &index,
+        });
+
+    if (res == vk::Result::eErrorOutOfDateKHR || res == vk::Result::eSuboptimalKHR)
+    {
+        return false;
+    }
+    else if (res != vk::Result::eSuccess)
+    {
+        throw std::runtime_error("Graphics queue submission failed!");
+    }
+
+    return true;
+}
+
+void WindowRenderer::recreateSwapchain()
+{
+    current_swapchain_ = createSwapchain();
+}
+
+WindowRenderer::SwapchainData WindowRenderer::createSwapchain() const
 {
     auto surface_caps = physical_device_.getSurfaceCapabilitiesKHR(surface_.get());
     auto format = chose_surface_format(physical_device_, surface_.get());
@@ -102,26 +129,24 @@ WindowRenderer::SwapchainData WindowRenderer::create_swapchain() const
         image_count = std::min(image_count, surface_caps.maxImageCount);
     }
 
-    bool queues_differ = graphics_queue_.index != present_queue_.index;
-
-    std::vector<uint32_t> queue_families;
-    if (queues_differ)
-    {
-        queue_families = {graphics_queue_.index, present_queue_.index};
-    }
-
     SwapchainData new_swapchain;
 
     new_swapchain.swapchain = device_.createSwapchainKHRUnique(vk::SwapchainCreateInfoKHR{
-            {}, surface_.get(),
-            image_count, format.format, format.colorSpace,
-            extent, 1, vk::ImageUsageFlagBits::eColorAttachment,
-            queues_differ ? vk::SharingMode::eConcurrent : vk::SharingMode::eExclusive,
-            static_cast<uint32_t>(queue_families.size()), queue_families.data(),
-            surface_caps.currentTransform, vk::CompositeAlphaFlagBitsKHR::eOpaque,
-            present_mode,
-            /* clipped */ true,
-            /* old swapchain */ current_swapchain_.swapchain.get()
+            .surface = surface_.get(),
+            .minImageCount = image_count,
+            .imageFormat = format.format,
+            .imageColorSpace = format.colorSpace,
+            .imageExtent = extent,
+            .imageArrayLayers = 1,
+            .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
+            .imageSharingMode = vk::SharingMode::eExclusive,
+            .queueFamilyIndexCount = 1,
+            .pQueueFamilyIndices = &queue_family_,
+            .preTransform = surface_caps.currentTransform,
+            .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
+            .presentMode = present_mode,
+            .clipped = true,
+            .oldSwapchain = current_swapchain_.swapchain.get()
         });
 
     new_swapchain.format = format.format;
@@ -134,9 +159,11 @@ WindowRenderer::SwapchainData WindowRenderer::create_swapchain() const
     {
         new_swapchain.elements[i].image = imgs[i];
         new_swapchain.elements[i].image_view = device_.createImageViewUnique(vk::ImageViewCreateInfo{
-                {}, imgs[i], vk::ImageViewType::e2D, format.format,
-                vk::ComponentMapping{},
-                vk::ImageSubresourceRange{
+                .image = imgs[i],
+                .viewType = vk::ImageViewType::e2D,
+                .format = format.format,
+                .components = vk::ComponentMapping{},
+                .subresourceRange = vk::ImageSubresourceRange{
                 	.aspectMask = vk::ImageAspectFlagBits::eColor,
                 	.baseMipLevel = 0,
                 	.levelCount = 1,
@@ -147,9 +174,4 @@ WindowRenderer::SwapchainData WindowRenderer::create_swapchain() const
     }
 
     return new_swapchain;
-}
-
-unifex::task<void> WindowRenderer::render_frame(float delta_seconds)
-{
-    co_return;
 }

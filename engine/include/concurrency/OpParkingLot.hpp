@@ -90,6 +90,7 @@ public:
     }
 
     template<class T, class... Lots>
+        requires (sizeof...(Lots) > 0)
     friend void multi_cancel_all(std::unique_lock<T>& lock, Lots&... lots);
 
 private:

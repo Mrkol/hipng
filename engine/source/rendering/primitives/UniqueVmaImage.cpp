@@ -7,11 +7,16 @@ UniqueVmaImage::UniqueVmaImage(VmaAllocator allocator, vk::Format format, vk::Ex
     , layers{layers}
 {
     vk::ImageCreateInfo image_info{
-        {}, vk::ImageType::e2D, format, vk::Extent3D{extent.width, extent.height, 1},
-        1,
-        static_cast<uint32_t>(layers),
-        vk::SampleCountFlagBits::e1, tiling, image_usage, vk::SharingMode::eExclusive,
-        {}, vk::ImageLayout::eUndefined
+        .imageType = vk::ImageType::e2D,
+        .format = format,
+        .extent = vk::Extent3D{extent.width, extent.height, 1},
+        .mipLevels = 1,
+        .arrayLayers = static_cast<uint32_t>(layers),
+        .samples = vk::SampleCountFlagBits::e1,
+        .tiling = tiling,
+        .usage = image_usage,
+        .sharingMode = vk::SharingMode::eExclusive,
+        .initialLayout = vk::ImageLayout::eUndefined
     };
     VmaAllocationCreateInfo alloc_info{
         .usage = memory_usage
@@ -75,12 +80,14 @@ void UniqueVmaImage::transfer_layout(vk::CommandBuffer cb,
     vk::PipelineStageFlags srcStages, vk::PipelineStageFlags dstStages)
 {
     vk::ImageMemoryBarrier barrier{
-        srcAccess, dstAccess,
-        src, dst,
-        VK_QUEUE_FAMILY_IGNORED,
-        VK_QUEUE_FAMILY_IGNORED,
-        image,
-        vk::ImageSubresourceRange{
+        .srcAccessMask = srcAccess,
+        .dstAccessMask = dstAccess,
+        .oldLayout = src,
+        .newLayout = dst,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = image,
+        .subresourceRange = vk::ImageSubresourceRange{
             vk::ImageAspectFlagBits::eColor, 0, 1, 0, static_cast<uint32_t>(layers),
         }
     };

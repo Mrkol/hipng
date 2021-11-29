@@ -6,7 +6,7 @@
 
 
 // TODO: remove when clang stops being a piece of shit
-#if NG_COMPILER_CLANG
+#ifdef NG_COMPILER_CLANG
 
 namespace detail
 {
@@ -24,7 +24,7 @@ struct SourceLocation
 
 }
 
-#define NG_CURRENT_LOCATION detail::SourceLocation{__FILE__, __LINE__. __PRETTY_FUNCTION__}
+#define NG_CURRENT_LOCATION detail::SourceLocation{__FILE__, __LINE__, __PRETTY_FUNCTION__}
 
 #else
 #include <source_location>
@@ -61,20 +61,22 @@ template<typename... Ts>
 
 
 // Fires in all builds
-#define NG_VERIFY(cond, msg, ...)                           \
+#define NG_VERIFYF(cond, msg, ...)                          \
     do                                                      \
     {                                                       \
         if (!(cond))                                        \
         {                                                   \
-            NG_PANIC(msg, ##__VA_ARGS__);        \
+            NG_PANIC(msg, ##__VA_ARGS__);                   \
         }                                                   \
     } while (false)
 
+#define NG_VERIFY(cond) NG_VERIFYF(cond, "")
+
 // Fires only in the debug build
 #ifndef NDEBUG
-#define NG_ASSERTF(cond, msg) do { ((void) (cond)); ((void) (msg); } while (false)
-#define NG_ASSERT(cond) do { ((void) (cond)); } while (false)
+#define NG_ASSERTF(cond, msg) do { ((void) (cond)); ((void) (msg)); } while (false)
 #else
-#define NG_ASSERTF(cond, msg, ...) NG_VERIFY(cond, msg, ##__VA_ARGS__)
-#define NG_ASSERT(cond) NG_VERIFY(cond, "")
+#define NG_ASSERTF(cond, msg, ...) NG_VERIFYF(cond, msg, ##__VA_ARGS__)
 #endif
+
+#define NG_ASSERT(cond) NG_ASSERTF(cond, "")
