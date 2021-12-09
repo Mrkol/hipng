@@ -1,7 +1,7 @@
 #pragma once
 
-#include <unifex/thread_unsafe_event_loop.hpp>
 #include <unifex/task.hpp>
+#include <unifex/async_scope.hpp>
 #include <flecs.h>
 
 #include "rendering/GlobalRenderer.hpp"
@@ -11,6 +11,7 @@
 
 
 constexpr auto APP_NAME = "HipNg";
+
 
 // Forces GLFW to initialize before everything else via an inheritance trick
 struct EngineBase
@@ -27,8 +28,6 @@ struct EngineBase
 class Engine : EngineBase
 {
 public:
-    static constexpr std::size_t MAX_INFLIGHT_FRAMES = 1;
-
     friend class EngineHandle;
 
 public:
@@ -40,7 +39,7 @@ public:
     int run();
     
 private:
-    unifex::task<int> main_event_loop();
+    unifex::task<int> mainEventLoop();
 
 private:
     using Clock = std::chrono::steady_clock;
@@ -52,4 +51,9 @@ private:
     BlockingThreadPool blocking_thread_pool_;
 
     std::unique_ptr<GlobalRenderer> renderer_;
+
+    std::size_t current_frame_idx_{0};
+    std::size_t inflight_frames_ {2}; // TODO: replcae with a config
+
+    unifex::async_scope* current_flecs_scope_;
 };

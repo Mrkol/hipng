@@ -7,9 +7,11 @@
 #include <unifex/task.hpp>
 #include <unifex/async_manual_reset_event.hpp>
 
+#include "concurrency/EventQueue.hpp"
 #include "util/Assert.hpp"
-#include "util/HeapArray.hpp"
 #include "rendering/WindowRenderer.hpp"
+#include "rendering/TempForwardRenderer.hpp"
+#include "rendering/primitives/InflightResource.hpp"
 
 
 struct GlobalRendererCreateInfo
@@ -17,7 +19,6 @@ struct GlobalRendererCreateInfo
     vk::ApplicationInfo app_info;
     std::span<const char* const> layers;
     std::span<const char* const> extensions;
-    uint32_t max_frames_in_flight;
 };
 
 class GlobalRenderer
@@ -44,10 +45,18 @@ private:
         return static_cast<uint32_t>(it - queues.begin());
     }
 
+    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+	    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+	    VkDebugUtilsMessageTypeFlagsEXT messageType,
+	    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+	    void* pUserData);
+
+
 private:
-    uint32_t max_frames_in_flight_;
+    EventQueue command_queue_;
 
     vk::UniqueInstance instance_;
+    vk::UniqueDebugUtilsMessengerEXT debug_messenger_;
     vk::PhysicalDevice physical_device_;
     vk::UniqueDevice device_;
     std::unique_ptr<std::remove_pointer_t<VmaAllocator>, void(*)(VmaAllocator)> allocator_{nullptr, nullptr};
@@ -57,7 +66,8 @@ private:
     // As per advice from the internet, we use the SAME queue for both graphics and present
     // no hardware exists where this would be a problem, apparently
     uint32_t graphics_queue_idx_;
+    
+    InflightResource<unifex::async_manual_reset_event> frame_submitted_;
 
-    std::vector<vk::UniqueFence> inflight_fences_;
-    HeapArray<unifex::async_manual_reset_event> frame_submitted_events_;
+    std::unique_ptr<TempForwardRenderer> forward_renderer_;
 };

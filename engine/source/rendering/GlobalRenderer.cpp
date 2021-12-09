@@ -8,21 +8,18 @@
 #include <unifex/on.hpp>
 
 #include "core/EngineHandle.hpp"
+#include "util/DebugBreak.hpp"
+#include "util/Defer.hpp"
 
 
 constexpr std::array DEVICE_EXTENSIONS {static_cast<const char*>(VK_KHR_SWAPCHAIN_EXTENSION_NAME)};
 
 
 GlobalRenderer::GlobalRenderer(GlobalRendererCreateInfo info)
-    : max_frames_in_flight_{info.max_frames_in_flight}
-    , frame_submitted_events_(max_frames_in_flight_)
+    : frame_submitted_(std::in_place, false)
 {
-    while (frame_submitted_events_.size() < max_frames_in_flight_)
-    {
-        frame_submitted_events_.emplace_back(false);
-    }
-    // let the 0th frame through
-    frame_submitted_events_.back().set();
+    // Game starts from frame 1, so to let it go through
+    frame_submitted_.get(0)->set();
 
     instance_ = vk::createInstanceUnique(vk::InstanceCreateInfo{
             .pApplicationInfo = &info.app_info,
@@ -31,6 +28,8 @@ GlobalRenderer::GlobalRenderer(GlobalRendererCreateInfo info)
             .enabledExtensionCount = static_cast<uint32_t>(info.extensions.size()),
             .ppEnabledExtensionNames = info.extensions.data()
         });
+    
+    VULKAN_HPP_DEFAULT_DISPATCHER.init(instance_.get());
 
     auto pdevices = instance_->enumeratePhysicalDevices();
 
@@ -76,6 +75,26 @@ GlobalRenderer::GlobalRenderer(GlobalRendererCreateInfo info)
             .pEnabledFeatures = &features,
         });
 
+    VULKAN_HPP_DEFAULT_DISPATCHER.init(device_.get());
+
+    
+    //TODO: make this prettier
+#ifndef NDEBUG
+    debug_messenger_ = instance_->createDebugUtilsMessengerEXTUnique(
+        vk::DebugUtilsMessengerCreateInfoEXT{
+            .messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eError
+				| vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo
+				| vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose
+				| vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning,
+            .messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral
+				| vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance
+				| vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation,
+            .pfnUserCallback = debugCallback,
+            .pUserData = this
+		});
+#endif
+
+
     {
         VmaAllocatorCreateInfo alloc_info{
                 .flags = {},
@@ -85,7 +104,7 @@ GlobalRenderer::GlobalRenderer(GlobalRendererCreateInfo info)
                 .preferredLargeHeapBlockSize = {},
                 .pAllocationCallbacks = {},
                 .pDeviceMemoryCallbacks = {},
-                .frameInUseCount = max_frames_in_flight_,
+                .frameInUseCount = static_cast<uint32_t>(g_engine.inflightFrames()),
                 .pHeapSizeLimit = {},
                 .pVulkanFunctions = {},
                 .pRecordSettings = {},
@@ -100,11 +119,16 @@ GlobalRenderer::GlobalRenderer(GlobalRendererCreateInfo info)
         allocator_ = {allocator, &vmaDestroyAllocator};
     }
 
-    inflight_fences_.reserve(max_frames_in_flight_);
-    while (inflight_fences_.size() < max_frames_in_flight_)
-    {
-        inflight_fences_.push_back(device_->createFenceUnique(vk::FenceCreateInfo{}));
-    }
+    forward_renderer_ = std::make_unique<TempForwardRenderer>(
+        TempForwardRenderer::CreateInfo{
+            .device = device_.get(),
+            .graphics_queue = device_->getQueue2(
+                vk::DeviceQueueInfo2{
+                	.queueFamilyIndex = graphics_queue_idx_,
+                    .queueIndex = 0
+                }),
+        	.queue_family = graphics_queue_idx_,
+        });
 }
 
 WindowRenderer* GlobalRenderer::makeWindowRenderer(vk::UniqueSurfaceKHR surface, ResolutionProvider resolution_provider)
@@ -115,40 +139,96 @@ WindowRenderer* GlobalRenderer::makeWindowRenderer(vk::UniqueSurfaceKHR surface,
         );
 
 
-    return window_renderers_.emplace_back(std::make_unique<WindowRenderer>(WindowRendererCreateInfo{
+    auto result = window_renderers_.emplace_back(std::make_unique<WindowRenderer>(WindowRenderer::CreateInfo{
             .physical_device = physical_device_,
             .device = device_.get(),
             .allocator = allocator_.get(),
             .surface = std::move(surface),
             .resolution_provider = std::move(resolution_provider),
+			.present_queue = device_->getQueue(graphics_queue_idx_, 0),
             .queue_family = graphics_queue_idx_,
         })).get();
+
+    // TODO: REMOVE THIS KOSTYL
+    auto res = window_renderers_[0]->recreateSwapchain();
+    auto imgs = window_renderers_[0]->getAllImages();
+    forward_renderer_->updatePresentationTarget(imgs, res);
+
+    return result;
+}
+
+VkBool32 GlobalRenderer::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+	VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+	void* pUserData)
+{
+    auto& self = *static_cast<GlobalRenderer*>(pUserData);
+
+    if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+    {
+	    spdlog::error(pCallbackData->pMessage);
+    }
+    else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+    {
+	    spdlog::warn(pCallbackData->pMessage);
+    }
+    else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
+    {
+	    spdlog::info(pCallbackData->pMessage);
+    }
+    else
+    {
+	    spdlog::trace(pCallbackData->pMessage);
+    }
+
+    DEBUG_BREAK();
+
+    return VK_FALSE;
 }
 
 unifex::task<void> GlobalRenderer::renderFrame(std::size_t frame_index)
 {
-    std::size_t this_inflight_index = frame_index % max_frames_in_flight_;
-    std::size_t prev_inflight_index = (max_frames_in_flight_ + frame_index - 1) % max_frames_in_flight_;
-
-    co_await unifex::on(g_engine.main_scheduler(), frame_submitted_events_[prev_inflight_index].async_wait());
-    frame_submitted_events_[this_inflight_index].reset();
+    co_await unifex::on(g_engine.mainScheduler(), frame_submitted_.get_previous(frame_index)->async_wait());
+    frame_submitted_.get_previous(frame_index)->reset();
 
     std::vector<std::optional<WindowRenderer::SwapchainImage>> window_images;
     window_images.reserve(window_renderers_.size());
     for (auto& window : window_renderers_)
     {
-        window_images.push_back(window->acquireNext());
+        window_images.push_back(co_await window->acquireNext(frame_index));
     }
 
-    std::vector<vk::Semaphore> waitSems;
-    for (auto& img : window_images)
+    Defer defer(
+        [this, &window_images, frame_index]() mutable
+	    {
+		    for (std::size_t i = 0; i < window_renderers_.size(); ++i)
+		    {
+		        if (window_images[i].has_value())
+		        {
+		            window_renderers_[i]->markImageFree(window_images[i].value().view);
+		        }
+		    }
+
+		    frame_submitted_.get(frame_index)->set();
+	    });
+    
+    
+    // TODO: remove this kostyl
+    NG_VERIFY(window_images.size() > 0);
+    
+    if (!window_images[0].has_value())
     {
-        if (img.has_value())
-        {
-            waitSems.push_back(img.value().available);
-        }
-    }
+        // TODO: something sensible to make sure that all previous frames are done
+        device_->getQueue(graphics_queue_idx_, 0).waitIdle();
 
+	    auto res = window_renderers_[0]->recreateSwapchain();
+	    auto imgs = window_renderers_[0]->getAllImages();
+	    forward_renderer_->updatePresentationTarget(imgs, res);
+
+        co_return;
+    }
+    
+    auto done = forward_renderer_->render(frame_index, window_images[0]->view, window_images[0]->available);
+	
 
 
     for (std::size_t i = 0; i < window_renderers_.size(); ++i)
@@ -156,11 +236,19 @@ unifex::task<void> GlobalRenderer::renderFrame(std::size_t frame_index)
         if (window_images[i].has_value())
         {
             auto& image = window_images[i].value();
-            window_renderers_[i]->present(image.available, image.index);
+            window_renderers_[i]->present(done.sem, image.view);
         }
     }
 
-    frame_submitted_events_[frame_index].set();
+    co_await unifex::schedule(g_engine.blockingScheduler());
+    // TODO: sensible timeout
+    auto res = device_->waitForFences(std::array{done.fence}, true, 1000000000);
+    // TODO: if this fails, the device was probably lost, so something cleverer is needed here.
+	NG_VERIFY(res == vk::Result::eSuccess);
+
+    device_->resetFences(std::array{done.fence});
+
+    // No need to return to the main scheduler, as this coroutine ends soon
 
     co_return;
 }

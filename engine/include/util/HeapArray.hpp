@@ -5,9 +5,14 @@ template<typename T>
 class HeapArray
 {
 public:
+    HeapArray() : HeapArray(0) {}
+
     explicit HeapArray(std::size_t capacity) : capacity_{capacity}
     {
-        start_ = reinterpret_cast<T*>(new std::byte[capacity * sizeof(T)]);
+        if (capacity > 0)
+        {
+			start_ = reinterpret_cast<T*>(new std::byte[capacity * sizeof(T)]);
+        }
     }
 
     HeapArray(const HeapArray&) = delete;
@@ -24,7 +29,7 @@ public:
 
     HeapArray& operator=(HeapArray&& other) noexcept
     {
-        if (other == this)
+        if (&other == this)
         {
             return *this;
         }
@@ -92,13 +97,18 @@ public:
     {
         for (std::size_t i = 0; i < size_; ++i)
         {
-            delete (start_ + i);
+            (start_ + i)->~T();
         }
         delete[] reinterpret_cast<std::byte*>(start_);
     }
+    
+    auto begin() { return start_; }
+    auto end() { return start_ + size_; }
+    auto cbegin() const { return start_; }
+    auto cend() const { return start_ + size_; }
 
 private:
-    T* start_;
+    T* start_{nullptr};
     std::size_t capacity_;
     std::size_t size_{0};
 };

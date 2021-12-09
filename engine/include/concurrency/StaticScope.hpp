@@ -20,8 +20,23 @@ class StaticScope
             std::move(*this).set_done();
         }
 
-        [[noreturn]] void set_error(auto) noexcept
+        [[noreturn]] void set_error(auto err) noexcept
         {
+            if constexpr (std::same_as<decltype(err), std::exception_ptr>)
+            {
+                try
+                {
+			        std::rethrow_exception(err);
+			    }
+            	catch (const std::exception& e)
+                {
+			        spdlog::error(e.what());
+			    }
+                catch(...)
+                {
+	                spdlog::error("Something different from an exception got thrown in the rendering scope!");
+                }
+            }
             std::terminate();
         }
 

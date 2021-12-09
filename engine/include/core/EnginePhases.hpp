@@ -23,6 +23,6 @@ inline void run_all(const flecs::query<>& q)
 {
     q.each([](flecs::entity e)
     {
-        flecs::system<>(e.world(), e).run();
+        flecs::system(e.world(), e).run();
     });
 }

@@ -21,7 +21,7 @@ class BlockingThreadPool
         {
         }
 
-        void start()
+        void start() noexcept
         {
             pool.enqueue(this);
         }

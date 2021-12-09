@@ -46,7 +46,7 @@ template<typename... Ts>
 {
     spdlog::critical("Panicked at {}:{} ({})", loc.file_name(), loc.line(), loc.function_name());
     spdlog::critical(message, ts...);
-    std::abort();
+    std::terminate();
 }
 
 }
@@ -73,7 +73,7 @@ template<typename... Ts>
 #define NG_VERIFY(cond) NG_VERIFYF(cond, "")
 
 // Fires only in the debug build
-#ifndef NDEBUG
+#ifdef NDEBUG
 #define NG_ASSERTF(cond, msg) do { ((void) (cond)); ((void) (msg)); } while (false)
 #else
 #define NG_ASSERTF(cond, msg, ...) NG_VERIFYF(cond, msg, ##__VA_ARGS__)

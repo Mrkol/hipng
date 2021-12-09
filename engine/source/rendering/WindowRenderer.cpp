@@ -1,6 +1,7 @@
 #include "rendering/WindowRenderer.hpp"
 
 #include <unifex/just.hpp>
+#include <unifex/on.hpp>
 #include "util/Assert.hpp"
 
 #include <spdlog/spdlog.h>
@@ -55,48 +56,73 @@ vk::Extent2D chose_swap_extent(const vk::SurfaceCapabilitiesKHR& capabilities, v
 
 
 
-WindowRenderer::WindowRenderer(WindowRendererCreateInfo info)
+WindowRenderer::WindowRenderer(CreateInfo info)
     : physical_device_{info.physical_device}
     , device_{info.device}
-    , allocator_{info.allocator}
     , surface_(std::move(info.surface))
     , resolution_provider_{std::move(info.resolution_provider)}
-    , present_queue_{info.present_queue}
     , queue_family_{info.queue_family}
+    , present_queue_{info.present_queue}
+	, image_available_sem_(
+        [&info](std::size_t)
+		{
+			return info.device.createSemaphoreUnique(vk::SemaphoreCreateInfo{});
+		})
 {
 }
 
-auto WindowRenderer::acquireNext() -> std::optional<SwapchainImage>
+auto WindowRenderer::acquireNext(std::size_t frame_index)
+	-> unifex::task<std::optional<SwapchainImage>>
 {
-    auto res = device_.acquireNextImage2KHR(vk::AcquireNextImageInfoKHR{
-        .swapchain = current_swapchain_.swapchain.get(),
-        .timeout = 1000000,
-        .semaphore = {},
-        .fence = {},
-        .deviceMask = 0
-    });
+    auto sem = image_available_sem_.get(frame_index)->get();
 
-    if (res.result == vk::Result::eErrorOutOfDateKHR)
+    // This blocks on mobile when the swapchain has no available images,
+    // therefore we try to avoid acquiring too many images by fine-tuning
+    // inflight frames and swapchain size.
+    uint32_t index;
+    // non-throwing version
+    auto res = device_.acquireNextImageKHR(
+        current_swapchain_.swapchain.get(),
+        1000000,
+        sem,
+        {},
+        &index
+    );
+
+    if (res == vk::Result::eErrorOutOfDateKHR)
     {
-	    return std::nullopt;
+	    co_return std::nullopt;
     }
-    else if (res.result != vk::Result::eSuccess && res.result != vk::Result::eSuboptimalKHR)
+
+	if (res != vk::Result::eSuccess && res != vk::Result::eSuboptimalKHR)
     {
 	    throw std::runtime_error("Swapchain lost!");
     }
 
-    return SwapchainImage{current_swapchain_.elements[res.value].image_view.get(), vk::Semaphore{}, res.value};
+    auto& element = current_swapchain_.elements[index];
+
+    co_await element.mtx.async_lock();
+
+    co_return SwapchainImage {
+    		.view = element.image_view.get(),
+    		.available = sem,
+    	};
 }
 
-bool WindowRenderer::present(vk::Semaphore wait, uint32_t index)
+bool WindowRenderer::present(vk::Semaphore wait, vk::ImageView which)
 {
-    auto res = present_queue_.presentKHR(vk::PresentInfoKHR{
-            .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &wait,
-            .swapchainCount = 1,
-            .pSwapchains = &current_swapchain_.swapchain.get(),
-            .pImageIndices = &index,
-        });
+    auto index = viewToIdx(which);
+
+    vk::PresentInfoKHR presentInfo{
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &wait,
+        .swapchainCount = 1,
+        .pSwapchains = &current_swapchain_.swapchain.get(),
+        .pImageIndices = &index,
+    };
+
+    // non-throwing version
+    auto res = present_queue_.presentKHR(&presentInfo);
 
     if (res == vk::Result::eErrorOutOfDateKHR || res == vk::Result::eSuboptimalKHR)
     {
@@ -110,9 +136,27 @@ bool WindowRenderer::present(vk::Semaphore wait, uint32_t index)
     return true;
 }
 
-void WindowRenderer::recreateSwapchain()
+std::vector<vk::ImageView> WindowRenderer::getAllImages()
+{
+    std::vector<vk::ImageView> result;
+    result.reserve(current_swapchain_.elements.size());
+    for (auto& el : current_swapchain_.elements)
+    {
+	    result.push_back(el.image_view.get());
+    }
+
+    return result;
+}
+
+vk::Extent2D WindowRenderer::recreateSwapchain()
 {
     current_swapchain_ = createSwapchain();
+    return current_swapchain_.extent;
+}
+
+void WindowRenderer::markImageFree(vk::ImageView which)
+{
+    current_swapchain_.elements[viewToIdx(which)].mtx.unlock();
 }
 
 WindowRenderer::SwapchainData WindowRenderer::createSwapchain() const
@@ -154,12 +198,13 @@ WindowRenderer::SwapchainData WindowRenderer::createSwapchain() const
 
     auto imgs = device_.getSwapchainImagesKHR(new_swapchain.swapchain.get());
     
-    new_swapchain.elements.resize(imgs.size());
-    for (std::size_t i = 0; i < imgs.size(); ++i)
+    new_swapchain.elements = HeapArray<SwapchainElement>(imgs.size());
+    for (auto img : imgs)
     {
-        new_swapchain.elements[i].image = imgs[i];
-        new_swapchain.elements[i].image_view = device_.createImageViewUnique(vk::ImageViewCreateInfo{
-                .image = imgs[i],
+        auto& el = new_swapchain.elements.emplace_back();
+        el.image = img;
+        el.image_view = device_.createImageViewUnique(vk::ImageViewCreateInfo{
+                .image = img,
                 .viewType = vk::ImageViewType::e2D,
                 .format = format.format,
                 .components = vk::ComponentMapping{},
@@ -174,4 +219,16 @@ WindowRenderer::SwapchainData WindowRenderer::createSwapchain() const
     }
 
     return new_swapchain;
+}
+
+uint32_t WindowRenderer::viewToIdx(vk::ImageView view)
+{
+    uint32_t index = 0;
+    while (index < current_swapchain_.elements.size()
+        && current_swapchain_.elements[index].image_view.get() != view)
+    {
+	    ++index;
+    }
+
+    return index;
 }

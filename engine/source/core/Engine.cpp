@@ -47,37 +47,50 @@ Engine::Engine(int argc, char** argv)
 
 int Engine::run()
 {
-    return unifex::sync_wait(main_event_loop()).value_or(-1);
+    return unifex::sync_wait(mainEventLoop()).value_or(-1);
 }
 
-unifex::task<int> Engine::main_event_loop()
+unifex::task<int> Engine::mainEventLoop()
 {
-    co_await unifex::schedule(g_engine.main_scheduler());
+    co_await unifex::schedule(g_engine.mainScheduler());
 
     spdlog::info("Game loop starting");
 
     // We have to poll GLFW on the same thread the window got created :/
     run_all(query_for_tag<TGameLoopStarting>(world_));
-    auto reschedule = unifex::schedule_with_subscheduler(g_engine.main_scheduler());
+    auto reschedule = unifex::schedule_with_subscheduler(g_engine.mainScheduler());
 
     auto render_windows = world_.query<CWindow>();
 
     bool should_quit = false;
 
-    StaticScope<MAX_INFLIGHT_FRAMES, unifex::task<void>> rendering_scope(MAX_INFLIGHT_FRAMES);
+    StaticScope<EngineHandle::MAX_INFLIGHT_FRAMES, unifex::task<void>>
+		rendering_scope(g_engine.inflightFrames());
+
     while (!should_quit)
     {
         co_await reschedule;
+
+        ++current_frame_idx_;
+
         glfwPollEvents();
 
         auto this_tick = Clock::now();
         float delta_seconds =
             std::chrono::duration_cast<std::chrono::duration<float, std::ratio<1, 1>>>(this_tick - last_tick_).count();
         last_tick_ = this_tick;
-        
-        should_quit |= !world_.progress(delta_seconds);
 
-        co_await rendering_scope.spawn_next(renderer_->renderFrame(delta_seconds));
+        {
+	        unifex::async_scope flecs_scope;
+            current_flecs_scope_ = &flecs_scope;
+            
+	        should_quit |= !world_.progress(delta_seconds);
+
+            co_await unifex::on(g_engine.mainScheduler(), flecs_scope.cleanup());
+        }
+        
+
+        co_await rendering_scope.spawn_next(renderer_->renderFrame(current_frame_idx_));
     }
 
     run_all(query_for_tag<TGameLoopFinished>(world_));

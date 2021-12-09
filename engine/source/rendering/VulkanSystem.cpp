@@ -38,6 +38,8 @@ void check_validation_layers_support(const std::array<const char*, size>& valida
 
 std::unique_ptr<GlobalRenderer> register_vulkan_systems(flecs::world& world, std::string_view app_name)
 {
+	VULKAN_HPP_DEFAULT_DISPATCHER.init(glfwGetInstanceProcAddress);
+    
     check_validation_layers_support(VALIDATION_LAYERS);
 
     std::string name_copy(app_name);
@@ -52,15 +54,17 @@ std::unique_ptr<GlobalRenderer> register_vulkan_systems(flecs::world& world, std
     uint32_t glfwExtCount;
     auto glfwExts = glfwGetRequiredInstanceExtensions(&glfwExtCount);
 
+    std::vector extensions(glfwExts, glfwExts + glfwExtCount);
+    extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+
     auto result = std::make_unique<GlobalRenderer>(GlobalRendererCreateInfo{
             .app_info = application_info,
             .layers = std::span{VALIDATION_LAYERS.begin(), VALIDATION_LAYERS.end()},
-            .extensions = std::span{glfwExts, glfwExts + glfwExtCount},
-            .max_frames_in_flight = 2
+            .extensions = extensions,
         });
 
     world.set<CGlobalRendererRef>({result.get()});
-
+    
 
     world.observer<CWindow, const TRequiresVulkan>()
         .event(flecs::OnAdd)
@@ -74,29 +78,28 @@ std::unique_ptr<GlobalRenderer> register_vulkan_systems(flecs::world& world, std
 
             auto unique_surface = vk::UniqueSurfaceKHR{
                     surface,
-                    vk::ObjectDestroy<vk::Instance, vk::DispatchLoaderStatic>{renderer->getInstance()}
+                    vk::ObjectDestroy<vk::Instance, VULKAN_HPP_DEFAULT_DISPATCHER_TYPE>{renderer->getInstance()}
                 };
-            (void) e.remove<TRequiresVulkan>()
-                    .set<CWindowRendererRef>({
-                        renderer->makeWindowRenderer(
-                                std::move(unique_surface),
-                                [window = window.glfw_window.get()]()
-                                    -> vk::Extent2D
-                                {
-                                    int width, height;
-                                    glfwGetFramebufferSize(window, &width, &height);
 
-                                    while (width == 0 || height == 0)
-                                    {
-                                        glfwWaitEvents();
-                                        glfwGetFramebufferSize(window, &width, &height);
-                                    }
+            (void) renderer->makeWindowRenderer(
+                        std::move(unique_surface),
+                        [window = window.glfw_window.get()]()
+                            -> vk::Extent2D
+                        {
+                            int width, height;
+                            glfwGetFramebufferSize(window, &width, &height);
 
-                                    return vk::Extent2D{static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
-                                }
-                            )
-                    })
-                    .add<RDependsOn>(e.world().component<CGlobalRendererRef>());
+                            while (width == 0 || height == 0)
+                            {
+                                glfwWaitEvents();
+                                glfwGetFramebufferSize(window, &width, &height);
+                            }
+
+                            return vk::Extent2D{static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
+                        }
+                    );
+
+            (void) e.remove<TRequiresVulkan>();
         });
 
     return result;
