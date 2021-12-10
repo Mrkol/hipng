@@ -53,7 +53,7 @@ private:
     std::unique_ptr<GlobalRenderer> renderer_;
 
     std::size_t current_frame_idx_{0};
-    std::size_t inflight_frames_ {2}; // TODO: replcae with a config
+    std::size_t inflight_frames_ {2}; // TODO: replace with a config
 
     unifex::async_scope* current_flecs_scope_;
 };

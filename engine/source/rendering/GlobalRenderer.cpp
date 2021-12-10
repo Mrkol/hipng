@@ -187,8 +187,21 @@ VkBool32 GlobalRenderer::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT me
 
 unifex::task<void> GlobalRenderer::renderFrame(std::size_t frame_index)
 {
-    co_await unifex::on(g_engine.mainScheduler(), frame_submitted_.get_previous(frame_index)->async_wait());
-    frame_submitted_.get_previous(frame_index)->reset();
+    // TODO: remove temp kostyl
+    auto recreateSwapchain =
+        [this]()
+        {
+            // TODO: something sensible to make sure that all previous frames are done
+            device_->getQueue(graphics_queue_idx_, 0).waitIdle();
+
+            auto res = window_renderers_[0]->recreateSwapchain();
+            auto imgs = window_renderers_[0]->getAllImages();
+            forward_renderer_->updatePresentationTarget(imgs, res);
+        };
+
+
+    co_await unifex::on(g_engine.mainScheduler(), frame_submitted_.getPrevious(frame_index)->async_wait());
+    frame_submitted_.getPrevious(frame_index)->reset();
 
     std::vector<std::optional<WindowRenderer::SwapchainImage>> window_images;
     window_images.reserve(window_renderers_.size());
@@ -217,26 +230,21 @@ unifex::task<void> GlobalRenderer::renderFrame(std::size_t frame_index)
     
     if (!window_images[0].has_value())
     {
-        // TODO: something sensible to make sure that all previous frames are done
-        device_->getQueue(graphics_queue_idx_, 0).waitIdle();
-
-	    auto res = window_renderers_[0]->recreateSwapchain();
-	    auto imgs = window_renderers_[0]->getAllImages();
-	    forward_renderer_->updatePresentationTarget(imgs, res);
-
+        recreateSwapchain();
         co_return;
     }
     
     auto done = forward_renderer_->render(frame_index, window_images[0]->view, window_images[0]->available);
-	
 
 
     for (std::size_t i = 0; i < window_renderers_.size(); ++i)
     {
         if (window_images[i].has_value())
         {
-            auto& image = window_images[i].value();
-            window_renderers_[i]->present(done.sem, image.view);
+            if (!window_renderers_[i]->present(done.sem, window_images[i].value().view))
+            {
+                window_images[i] = std::nullopt;
+            }
         }
     }
 
@@ -247,6 +255,12 @@ unifex::task<void> GlobalRenderer::renderFrame(std::size_t frame_index)
 	NG_VERIFY(res == vk::Result::eSuccess);
 
     device_->resetFences(std::array{done.fence});
+
+    if (!window_images[0].has_value())
+    {
+        recreateSwapchain();
+        co_return;
+    }
 
     // No need to return to the main scheduler, as this coroutine ends soon
 

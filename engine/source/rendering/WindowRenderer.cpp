@@ -83,7 +83,7 @@ auto WindowRenderer::acquireNext(std::size_t frame_index)
     // non-throwing version
     auto res = device_.acquireNextImageKHR(
         current_swapchain_.swapchain.get(),
-        1000000,
+        1000000000,
         sem,
         {},
         &index

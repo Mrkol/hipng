@@ -51,7 +51,6 @@ private:
 	    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 	    void* pUserData);
 
-
 private:
     EventQueue command_queue_;
 

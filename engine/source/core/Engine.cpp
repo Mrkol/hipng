@@ -93,6 +93,8 @@ unifex::task<int> Engine::mainEventLoop()
         co_await rendering_scope.spawn_next(renderer_->renderFrame(current_frame_idx_));
     }
 
+    co_await rendering_scope.all_finished();
+
     run_all(query_for_tag<TGameLoopFinished>(world_));
     
     main_thread_pool_.request_stop();

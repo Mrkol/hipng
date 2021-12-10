@@ -1,5 +1,6 @@
 #pragma once
 
+#include <span>
 #include <vulkan/vulkan.hpp>
 
 #include "rendering/primitives/InflightResource.hpp"

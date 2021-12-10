@@ -125,7 +125,7 @@ class StaticScope
         AllFinishedOp(StaticScope& s, Receiver2&& r)
             : AllFinishedOpBase(this)
             , scope{s}
-            , receiver{r}
+            , receiver{std::forward<Receiver2>(r)}
         {
         }
 
@@ -182,7 +182,7 @@ public:
         return SpawnedSender{this, std::forward<Sender2>(sender)};
     }
 
-    AllFinishedSender all_finished() const
+    AllFinishedSender all_finished()
     {
         return AllFinishedSender{this};
     }

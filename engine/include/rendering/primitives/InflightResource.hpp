@@ -36,11 +36,10 @@ public:
 	const T* get(std::size_t idx) const
 		{ return std::addressof(impl_[idx % g_engine.inflightFrames()]); }
 	
-	T* get_previous(std::size_t idx)
+	T* getPrevious(std::size_t idx)
 		{ return std::addressof(impl_[(idx + g_engine.inflightFrames() - 1) % g_engine.inflightFrames()].get()); }
-	const T* get_previous(std::size_t idx) const
+	const T* getPrevious(std::size_t idx) const
 	{ return std::addressof(impl_[(idx + g_engine.inflightFrames() - 1) % g_engine.inflightFrames()].get()); }
-
 
 	~InflightResource() noexcept
 	{
