@@ -9,7 +9,7 @@
 
 #include "concurrency/EventQueue.hpp"
 #include "util/Assert.hpp"
-#include "rendering/WindowRenderer.hpp"
+#include "rendering/Window.hpp"
 #include "rendering/TempForwardRenderer.hpp"
 #include "rendering/primitives/InflightResource.hpp"
 
@@ -21,16 +21,24 @@ struct GlobalRendererCreateInfo
     std::span<const char* const> extensions;
 };
 
-class GlobalRenderer
+class RenderingSubsystem
 {
 public:
-    explicit GlobalRenderer(GlobalRendererCreateInfo info);
+    explicit RenderingSubsystem(GlobalRendererCreateInfo info);
 
+    /**
+     * Warning: other public interface methods should NOT be called from this function.
+     * That would lead to a asynchronous deadlock :)
+     */
     [[nodiscard]] unifex::task<void> renderFrame(std::size_t frame_index);
 
     [[nodiscard]] vk::Instance getInstance() const { return instance_.get(); }
 
-    [[nodiscard]] WindowRenderer* makeWindowRenderer(vk::UniqueSurfaceKHR surface, ResolutionProvider resolution_provider);
+    /**
+     * Even if a GLFW window was opened, it doesn't get to use our rendering system until a
+     * `Window` counterpart was created for it.
+     */
+    [[nodiscard]] unifex::task<Window*> makeVkWindow(vk::UniqueSurfaceKHR surface, ResolutionProvider resolution_provider);
 
 private:
     template<std::invocable<const vk::QueueFamilyProperties&> F>
@@ -52,21 +60,31 @@ private:
 	    void* pUserData);
 
 private:
-    EventQueue command_queue_;
-
     vk::UniqueInstance instance_;
     vk::UniqueDebugUtilsMessengerEXT debug_messenger_;
     vk::PhysicalDevice physical_device_;
     vk::UniqueDevice device_;
     std::unique_ptr<std::remove_pointer_t<VmaAllocator>, void(*)(VmaAllocator)> allocator_{nullptr, nullptr};
 
-    std::vector<std::unique_ptr<WindowRenderer>> window_renderers_;
+    std::vector<std::unique_ptr<Window>> windows_;
+    std::vector<std::unique_ptr<IRenderer>> renderers_;
+
+    std::unordered_map<Window*, IRenderer*> window_renderer_mapping_;
 
     // As per advice from the internet, we use the SAME queue for both graphics and present
     // no hardware exists where this would be a problem, apparently
     uint32_t graphics_queue_idx_;
-    
-    InflightResource<unifex::async_manual_reset_event> frame_submitted_;
 
-    std::unique_ptr<TempForwardRenderer> forward_renderer_;
+    /**
+     * This HAS To be locked by anyone who wants to mess with the rendering system.
+     * Gets locked by each frame job. The implementation is guaranteed to be FIFO, so
+     * frame reorderings don't happen. Plus we can use this as a RT command queue!!!!
+     */
+    unifex::async_mutex frame_mutex_;
+    /**
+     * Sometimes younger frames end faster than old frames. In such cases
+     * incoming frames need to wait a bit so as not to create a data race on
+     * inflight resources.
+     */
+    InflightResource<unifex::async_mutex> inflight_mutex_;
 };

@@ -12,10 +12,10 @@
 #include "util/HeapArray.hpp"
 
 
-using ResolutionProvider = fu2::unique_function<vk::Extent2D() const>;
+using ResolutionProvider = fu2::unique_function<unifex::task<vk::Extent2D>() const>;
 
 
-class WindowRenderer
+class Window
 {
 public:
 	struct CreateInfo
@@ -30,7 +30,7 @@ public:
 	    uint32_t queue_family;
 	};
 
-    explicit WindowRenderer(CreateInfo info);
+    explicit Window(CreateInfo info);
 
     struct SwapchainImage
     {
@@ -53,8 +53,17 @@ public:
 
     std::vector<vk::ImageView> getAllImages();
 
-    // Should only be called when the present queue is free of present requests
-    vk::Extent2D recreateSwapchain();
+    /**
+     * Initiates the recreation process.
+     * @return Resolution of the new window
+     */
+    unifex::task<std::optional<vk::Extent2D>> recreateSwapchain();
+    /**
+     * Finalizes the recreation process.
+     * Should be called after everyone who wants to present to this image finished updating their data.
+     * This is ugly, but other solutions are even worse.
+     */
+    void markSwapchainRecreated();
 
     void markImageFree(vk::ImageView which);
 
@@ -74,7 +83,7 @@ private:
         HeapArray<SwapchainElement> elements;
     };
 
-    SwapchainData createSwapchain() const;
+    SwapchainData createSwapchain(vk::Extent2D resolution) const;
 
     uint32_t viewToIdx(vk::ImageView view);
 
@@ -88,6 +97,8 @@ private:
     uint32_t queue_family_;
     vk::Queue present_queue_;
 
-    SwapchainData current_swapchain_;
+    SwapchainData current_swapchain_{};
     InflightResource<vk::UniqueSemaphore> image_available_sem_;
+
+    std::atomic<bool> swapchain_missing_{false};
 };

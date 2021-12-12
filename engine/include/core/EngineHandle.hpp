@@ -37,6 +37,10 @@ public:
     BlockingThreadPool::Scheduler blockingScheduler();
 
 
+    /**
+     * Should ONLY get called from within a frame scope.
+     * Yes, this is dangerous and feels like a hack.
+     */
     void asyncThisFrame(unifex::task<void> task);
 
 

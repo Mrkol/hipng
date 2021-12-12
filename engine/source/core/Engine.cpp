@@ -71,6 +71,9 @@ unifex::task<int> Engine::mainEventLoop()
     {
         co_await reschedule;
 
+        unifex::async_scope frame_scope;
+        current_frame_scope_ = &frame_scope;
+
         ++current_frame_idx_;
 
         glfwPollEvents();
@@ -80,17 +83,13 @@ unifex::task<int> Engine::mainEventLoop()
             std::chrono::duration_cast<std::chrono::duration<float, std::ratio<1, 1>>>(this_tick - last_tick_).count();
         last_tick_ = this_tick;
 
-        {
-	        unifex::async_scope flecs_scope;
-            current_flecs_scope_ = &flecs_scope;
-            
-	        should_quit |= !world_.progress(delta_seconds);
 
-            co_await unifex::on(g_engine.mainScheduler(), flecs_scope.cleanup());
-        }
-        
+        should_quit |= !world_.progress(delta_seconds);
 
         co_await rendering_scope.spawn_next(renderer_->renderFrame(current_frame_idx_));
+
+        co_await unifex::on(g_engine.mainScheduler(), frame_scope.cleanup());
+        current_frame_scope_ = nullptr;
     }
 
     co_await rendering_scope.all_finished();

@@ -1,4 +1,4 @@
-#include "rendering/GlobalRenderer.hpp"
+#include "rendering/RenderingSubsystem.hpp"
 
 #include <unordered_set>
 
@@ -15,12 +15,9 @@
 constexpr std::array DEVICE_EXTENSIONS {static_cast<const char*>(VK_KHR_SWAPCHAIN_EXTENSION_NAME)};
 
 
-GlobalRenderer::GlobalRenderer(GlobalRendererCreateInfo info)
-    : frame_submitted_(std::in_place, false)
+RenderingSubsystem::RenderingSubsystem(GlobalRendererCreateInfo info)
+    : inflight_mutex_(std::in_place)
 {
-    // Game starts from frame 1, so to let it go through
-    frame_submitted_.get(0)->set();
-
     instance_ = vk::createInstanceUnique(vk::InstanceCreateInfo{
             .pApplicationInfo = &info.app_info,
             .enabledLayerCount = static_cast<uint32_t>(info.layers.size()),
@@ -119,27 +116,20 @@ GlobalRenderer::GlobalRenderer(GlobalRendererCreateInfo info)
         allocator_ = {allocator, &vmaDestroyAllocator};
     }
 
-    forward_renderer_ = std::make_unique<TempForwardRenderer>(
-        TempForwardRenderer::CreateInfo{
-            .device = device_.get(),
-            .graphics_queue = device_->getQueue2(
-                vk::DeviceQueueInfo2{
-                	.queueFamilyIndex = graphics_queue_idx_,
-                    .queueIndex = 0
-                }),
-        	.queue_family = graphics_queue_idx_,
-        });
+
 }
 
-WindowRenderer* GlobalRenderer::makeWindowRenderer(vk::UniqueSurfaceKHR surface, ResolutionProvider resolution_provider)
+unifex::task<Window*> RenderingSubsystem::makeVkWindow(vk::UniqueSurfaceKHR surface, ResolutionProvider resolution_provider)
 {
+    co_await frame_mutex_.async_lock();
+    Defer defer{[this]() { frame_mutex_.unlock(); }};
+
     NG_VERIFYF(
             physical_device_.getSurfaceSupportKHR(graphics_queue_idx_, surface.get()),
             "Some windows can't use the chosen graphics queue for presentation!"
         );
 
-
-    auto result = window_renderers_.emplace_back(std::make_unique<WindowRenderer>(WindowRenderer::CreateInfo{
+    auto result = windows_.emplace_back(std::make_unique<Window>(Window::CreateInfo{
             .physical_device = physical_device_,
             .device = device_.get(),
             .allocator = allocator_.get(),
@@ -150,22 +140,38 @@ WindowRenderer* GlobalRenderer::makeWindowRenderer(vk::UniqueSurfaceKHR surface,
         })).get();
 
     // TODO: REMOVE THIS KOSTYL
-    auto res = window_renderers_[0]->recreateSwapchain();
-    auto imgs = window_renderers_[0]->getAllImages();
-    forward_renderer_->updatePresentationTarget(imgs, res);
+    auto renderer = renderers_.emplace_back(new TempForwardRenderer(
+            TempForwardRenderer::CreateInfo{
+                    .device = device_.get(),
+                    .graphics_queue = device_->getQueue2(
+                            vk::DeviceQueueInfo2{
+                                    .queueFamilyIndex = graphics_queue_idx_,
+                                    .queueIndex = 0
+                            }),
+                    .queue_family = graphics_queue_idx_,
+            })).get();
 
-    return result;
+    window_renderer_mapping_.emplace(result, renderer);
+
+    auto res = co_await result->recreateSwapchain();
+    NG_VERIFY(res.has_value());
+    auto imgs = result->getAllImages();
+    renderer->updatePresentationTarget(imgs, res.value());
+    result->markSwapchainRecreated();
+
+    co_return result;
 }
 
-VkBool32 GlobalRenderer::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-	VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-	void* pUserData)
+VkBool32 RenderingSubsystem::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+                                           VkDebugUtilsMessageTypeFlagsEXT messageType, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+                                           void* pUserData)
 {
-    auto& self = *static_cast<GlobalRenderer*>(pUserData);
+    auto& self = *static_cast<RenderingSubsystem*>(pUserData);
 
     if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
     {
-	    spdlog::error(pCallbackData->pMessage);
+        spdlog::error(pCallbackData->pMessage);
+        DEBUG_BREAK();
     }
     else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
     {
@@ -180,89 +186,111 @@ VkBool32 GlobalRenderer::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT me
 	    spdlog::trace(pCallbackData->pMessage);
     }
 
-    DEBUG_BREAK();
-
     return VK_FALSE;
 }
 
-unifex::task<void> GlobalRenderer::renderFrame(std::size_t frame_index)
+unifex::task<void> RenderingSubsystem::renderFrame(std::size_t frame_index)
 {
-    // TODO: remove temp kostyl
-    auto recreateSwapchain =
-        [this]()
-        {
-            // TODO: something sensible to make sure that all previous frames are done
-            device_->getQueue(graphics_queue_idx_, 0).waitIdle();
+    auto& inflight_mtx = *inflight_mutex_.get(frame_index);
+    Defer defer{[&inflight_mtx]() { inflight_mtx.unlock(); }};
+    co_await inflight_mtx.async_lock();
 
-            auto res = window_renderers_[0]->recreateSwapchain();
-            auto imgs = window_renderers_[0]->getAllImages();
-            forward_renderer_->updatePresentationTarget(imgs, res);
-        };
+    co_await frame_mutex_.async_lock(); // WARNING: this gets unlocked at a peculiar time, don't mess this up!!!
 
-
-    co_await unifex::on(g_engine.mainScheduler(), frame_submitted_.getPrevious(frame_index)->async_wait());
-    frame_submitted_.getPrevious(frame_index)->reset();
-
-    std::vector<std::optional<WindowRenderer::SwapchainImage>> window_images;
-    window_images.reserve(window_renderers_.size());
-    for (auto& window : window_renderers_)
+    std::vector<std::optional<Window::SwapchainImage>> window_images;
+    window_images.reserve(windows_.size());
+    for (auto& window : windows_)
     {
         window_images.push_back(co_await window->acquireNext(frame_index));
     }
 
-    Defer defer(
-        [this, &window_images, frame_index]() mutable
-	    {
-		    for (std::size_t i = 0; i < window_renderers_.size(); ++i)
-		    {
-		        if (window_images[i].has_value())
-		        {
-		            window_renderers_[i]->markImageFree(window_images[i].value().view);
-		        }
-		    }
 
-		    frame_submitted_.get(frame_index)->set();
-	    });
-    
-    
-    // TODO: remove this kostyl
-    NG_VERIFY(window_images.size() > 0);
-    
-    if (!window_images[0].has_value())
-    {
-        recreateSwapchain();
-        co_return;
-    }
-    
-    auto done = forward_renderer_->render(frame_index, window_images[0]->view, window_images[0]->available);
-
-
-    for (std::size_t i = 0; i < window_renderers_.size(); ++i)
+    // TODO: THIS IS A DUMB PROOF OF CONCEPT
+    // needs to be alot more intricate than this
+    std::vector<std::optional<IRenderer::RenderingDone>> renderings_done;
+    renderings_done.reserve(window_images.size());
+    for (std::size_t i = 0; i < window_images.size(); ++i)
     {
         if (window_images[i].has_value())
         {
-            if (!window_renderers_[i]->present(done.sem, window_images[i].value().view))
+            renderings_done.emplace_back(window_renderer_mapping_[windows_[i].get()]
+                ->render(frame_index, window_images[i]->view, window_images[i]->available));
+        }
+        else
+        {
+            renderings_done.emplace_back(std::nullopt);
+        }
+    }
+
+
+    for (std::size_t i = 0; i < windows_.size(); ++i)
+    {
+        if (window_images[i].has_value())
+        {
+            if (!windows_[i]->present(renderings_done[i].value().sem, window_images[i].value().view))
             {
+                // TODO: This code is VERY BAD :(
+                windows_[i]->markImageFree(window_images[i].value().view);
                 window_images[i] = std::nullopt;
             }
         }
     }
 
-    co_await unifex::schedule(g_engine.blockingScheduler());
+    frame_mutex_.unlock();
+
+
+
+
+
+    // WARNING: none of the windows OR renderers for which a submission succeeded should get destroyed
+    // before this function finishes. Right now we never destroy windows, but it CAN become a problem later on.
     // TODO: sensible timeout
-    auto res = device_->waitForFences(std::array{done.fence}, true, 1000000000);
-    // TODO: if this fails, the device was probably lost, so something cleverer is needed here.
-	NG_VERIFY(res == vk::Result::eSuccess);
-
-    device_->resetFences(std::array{done.fence});
-
-    if (!window_images[0].has_value())
+    std::vector<vk::Fence> fences;
+    fences.reserve(renderings_done.size());
+    for (auto& sem_fence : renderings_done)
     {
-        recreateSwapchain();
-        co_return;
+        if (sem_fence.has_value())
+        {
+            fences.push_back(sem_fence.value().fence);
+        }
     }
 
-    // No need to return to the main scheduler, as this coroutine ends soon
+    if (!fences.empty())
+    {
+        co_await unifex::schedule(g_engine.blockingScheduler());
+
+        auto res = device_->waitForFences(fences, true, 1000000000);
+        // TODO: if this fails, the device was probably lost, so something cleverer is needed here.
+        NG_VERIFY(res == vk::Result::eSuccess);
+        device_->resetFences(fences);
+
+        co_await unifex::schedule(g_engine.mainScheduler());
+    }
+
+    for (std::size_t i = 0; i < windows_.size(); ++i)
+    {
+        if (window_images[i].has_value())
+        {
+            windows_[i]->markImageFree(window_images[i].value().view);
+        }
+    }
+
+    // If any swapchains were out of date or suboptimal, recreate them.
+    for (std::size_t i = 0; i < windows_.size(); ++i)
+    {
+        if (!window_images[i].has_value())
+        {
+            // This call is asynchronous, as it needs to wait for previous frames to finish presenting.
+            auto res = co_await windows_[i]->recreateSwapchain();
+            if (!res.has_value())
+            {
+                continue;
+            }
+            auto imgs = windows_[i]->getAllImages();
+            window_renderer_mapping_[windows_[i].get()]->updatePresentationTarget(imgs, res.value());
+            windows_[i]->markSwapchainRecreated();
+        }
+    }
 
     co_return;
 }

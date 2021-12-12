@@ -92,7 +92,7 @@ public:
     void request_stop() noexcept
     {
         stop_requested_.store(true, std::memory_order::relaxed);
-        tasks_available_.notify_one();
+        tasks_available_.notify_all();
     }
 
     ~BlockingThreadPool() noexcept

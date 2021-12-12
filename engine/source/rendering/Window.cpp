@@ -1,8 +1,9 @@
-#include "rendering/WindowRenderer.hpp"
+#include "rendering/Window.hpp"
 
 #include <unifex/just.hpp>
 #include <unifex/on.hpp>
 #include "util/Assert.hpp"
+#include "util/Defer.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -56,7 +57,7 @@ vk::Extent2D chose_swap_extent(const vk::SurfaceCapabilitiesKHR& capabilities, v
 
 
 
-WindowRenderer::WindowRenderer(CreateInfo info)
+Window::Window(CreateInfo info)
     : physical_device_{info.physical_device}
     , device_{info.device}
     , surface_(std::move(info.surface))
@@ -71,9 +72,14 @@ WindowRenderer::WindowRenderer(CreateInfo info)
 {
 }
 
-auto WindowRenderer::acquireNext(std::size_t frame_index)
+auto Window::acquireNext(std::size_t frame_index)
 	-> unifex::task<std::optional<SwapchainImage>>
 {
+    if (swapchain_missing_.load())
+    {
+        co_return std::nullopt;
+    }
+
     auto sem = image_available_sem_.get(frame_index)->get();
 
     // This blocks on mobile when the swapchain has no available images,
@@ -83,7 +89,7 @@ auto WindowRenderer::acquireNext(std::size_t frame_index)
     // non-throwing version
     auto res = device_.acquireNextImageKHR(
         current_swapchain_.swapchain.get(),
-        1000000000,
+        100000000000,
         sem,
         {},
         &index
@@ -96,11 +102,16 @@ auto WindowRenderer::acquireNext(std::size_t frame_index)
 
 	if (res != vk::Result::eSuccess && res != vk::Result::eSuboptimalKHR)
     {
-	    throw std::runtime_error("Swapchain lost!");
+        // Theoretically we could recover from this maybe?
+	    throw std::runtime_error(std::string("Swapchain element acquisition failed! Error code ")
+            + vk::to_string(res));
     }
 
     auto& element = current_swapchain_.elements[index];
 
+    // Sometimes swapchain returns the same image twice in a row. In such a case, we can't do
+    // inflight frames, this frame HAS to wait for the previous one to finish working with this
+    // swapchain image.
     co_await element.mtx.async_lock();
 
     co_return SwapchainImage {
@@ -109,7 +120,7 @@ auto WindowRenderer::acquireNext(std::size_t frame_index)
     	};
 }
 
-bool WindowRenderer::present(vk::Semaphore wait, vk::ImageView which)
+bool Window::present(vk::Semaphore wait, vk::ImageView which)
 {
     auto index = viewToIdx(which);
 
@@ -136,7 +147,7 @@ bool WindowRenderer::present(vk::Semaphore wait, vk::ImageView which)
     return true;
 }
 
-std::vector<vk::ImageView> WindowRenderer::getAllImages()
+std::vector<vk::ImageView> Window::getAllImages()
 {
     std::vector<vk::ImageView> result;
     result.reserve(current_swapchain_.elements.size());
@@ -148,23 +159,44 @@ std::vector<vk::ImageView> WindowRenderer::getAllImages()
     return result;
 }
 
-vk::Extent2D WindowRenderer::recreateSwapchain()
+unifex::task<std::optional<vk::Extent2D>> Window::recreateSwapchain()
 {
-    current_swapchain_ = createSwapchain();
-    return current_swapchain_.extent;
+    if (swapchain_missing_.exchange(true))
+    {
+        // The previous frame is already recreating the swapchain.
+        co_return std::nullopt;
+    }
+
+    for (auto& el : current_swapchain_.elements)
+    {
+        // Wait for all frames currently rendering to this window to finish,
+        // new ones cannot start due to the swapchain_missing_ flag
+        co_await el.mtx.async_lock();
+    }
+
+    // When the window gets minimized, we have to wait.
+    auto resolution = co_await resolution_provider_();
+    current_swapchain_ = createSwapchain(resolution);
+
+    co_return current_swapchain_.extent;
 }
 
-void WindowRenderer::markImageFree(vk::ImageView which)
+void Window::markSwapchainRecreated()
+{
+    swapchain_missing_.store(false);
+}
+
+void Window::markImageFree(vk::ImageView which)
 {
     current_swapchain_.elements[viewToIdx(which)].mtx.unlock();
 }
 
-WindowRenderer::SwapchainData WindowRenderer::createSwapchain() const
+Window::SwapchainData Window::createSwapchain(vk::Extent2D resolution) const
 {
     auto surface_caps = physical_device_.getSurfaceCapabilitiesKHR(surface_.get());
     auto format = chose_surface_format(physical_device_, surface_.get());
     auto present_mode = chose_present_mode(physical_device_, surface_.get());
-    auto extent = chose_swap_extent(surface_caps, resolution_provider_());
+    auto extent = chose_swap_extent(surface_caps, resolution);
 
     uint32_t image_count = surface_caps.minImageCount + 1;
 
@@ -221,7 +253,7 @@ WindowRenderer::SwapchainData WindowRenderer::createSwapchain() const
     return new_swapchain;
 }
 
-uint32_t WindowRenderer::viewToIdx(vk::ImageView view)
+uint32_t Window::viewToIdx(vk::ImageView view)
 {
     uint32_t index = 0;
     while (index < current_swapchain_.elements.size()

@@ -15,8 +15,8 @@ BlockingThreadPool::Scheduler EngineHandle::blockingScheduler()
 
 void EngineHandle::asyncThisFrame(unifex::task<void> task)
 {
-    NG_ASSERTF(engine_->current_flecs_scope_ != nullptr, "asyncThisFrame can only be called from a flecs system!");
-    engine_->current_flecs_scope_->spawn(std::move(task));
+    NG_ASSERTF(engine_->current_frame_scope_ != nullptr, "asyncThisFrame can only be called from a frame context!");
+    engine_->current_frame_scope_->spawn(std::move(task));
 }
 
 flecs::world& EngineHandle::world()

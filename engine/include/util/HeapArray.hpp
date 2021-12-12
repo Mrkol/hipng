@@ -33,6 +33,7 @@ public:
         {
             return *this;
         }
+        this->~HeapArray();
         start_ = std::exchange(other.start_, nullptr);
         capacity_ = std::exchange(other.capacity_, 0);
         size_ = std::exchange(other.size_, 0);

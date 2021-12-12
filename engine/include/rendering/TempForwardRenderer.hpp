@@ -3,10 +3,11 @@
 #include <span>
 #include <vulkan/vulkan.hpp>
 
+#include "rendering/IRenderer.hpp"
 #include "rendering/primitives/InflightResource.hpp"
 
 
-class TempForwardRenderer
+class TempForwardRenderer : public IRenderer
 {
 public:
 	struct CreateInfo
@@ -18,20 +19,17 @@ public:
 
 	explicit TempForwardRenderer(CreateInfo info);
 
-	struct RenderingDone
-	{
-		vk::Semaphore sem;
-		vk::Fence fence;
-	};
-
 	/**
-	 * Rationale for passing in the present image view is that when it changes, some framebuffers need
-	 * recreation. Keeping track of this should be the renderer's responsibility, the view is the only
-	 * thing bridging the windowing and rendering systems.
+	 *
+	 * @param frame_index
+	 * @param present_image -- Swapchain image that this operation should write to.
+	 * Used to dispatch some resources (i.e. framebuffers)
+	 * @param image_available -- Semaphore that gets signaled when we can start writing to the specified image view
+	 * @return Synchronization primitives that will be signaled when the rendering finishes
 	 */
-	RenderingDone render(std::size_t frame_index, vk::ImageView present_image, vk::Semaphore image_available);
+	RenderingDone render(std::size_t frame_index, vk::ImageView present_image, vk::Semaphore image_available) override;
 
-	void updatePresentationTarget(std::span<vk::ImageView> target, vk::Extent2D resolution);
+	void updatePresentationTarget(std::span<vk::ImageView> target, vk::Extent2D resolution) override;
 
 private:
 	vk::Device device_;

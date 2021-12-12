@@ -4,7 +4,7 @@
 #include <unifex/async_scope.hpp>
 #include <flecs.h>
 
-#include "rendering/GlobalRenderer.hpp"
+#include "rendering/RenderingSubsystem.hpp"
 #include "concurrency/ThreadPool.hpp"
 #include "concurrency/BlockingThreadPool.hpp"
 #include "core/EngineHandle.hpp"
@@ -50,10 +50,10 @@ private:
     ThreadPool main_thread_pool_;
     BlockingThreadPool blocking_thread_pool_;
 
-    std::unique_ptr<GlobalRenderer> renderer_;
+    std::unique_ptr<RenderingSubsystem> renderer_;
 
     std::size_t current_frame_idx_{0};
     std::size_t inflight_frames_ {2}; // TODO: replace with a config
 
-    unifex::async_scope* current_flecs_scope_;
+    unifex::async_scope* current_frame_scope_{nullptr}; // TODO: should probably become atomic further down the line.
 };

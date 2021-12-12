@@ -1,10 +1,11 @@
 #include "VulkanSystem.hpp"
 
-#include <spdlog/spdlog.h>
+#include <unifex/let_value.hpp>
+#include <unifex/sync_wait.hpp>
 
 #include "core/DependencySystem.hpp"
 #include "core/WindowSystem.hpp"
-#include "rendering/WindowRenderer.hpp"
+#include "rendering/Window.hpp"
 #include "util/Assert.hpp"
 
 
@@ -36,7 +37,7 @@ void check_validation_layers_support(const std::array<const char*, size>& valida
     }
 }
 
-std::unique_ptr<GlobalRenderer> register_vulkan_systems(flecs::world& world, std::string_view app_name)
+std::unique_ptr<RenderingSubsystem> register_vulkan_systems(flecs::world& world, std::string_view app_name)
 {
 	VULKAN_HPP_DEFAULT_DISPATCHER.init(glfwGetInstanceProcAddress);
     
@@ -57,7 +58,7 @@ std::unique_ptr<GlobalRenderer> register_vulkan_systems(flecs::world& world, std
     std::vector extensions(glfwExts, glfwExts + glfwExtCount);
     extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
-    auto result = std::make_unique<GlobalRenderer>(GlobalRendererCreateInfo{
+    auto result = std::make_unique<RenderingSubsystem>(GlobalRendererCreateInfo{
             .app_info = application_info,
             .layers = std::span{VALIDATION_LAYERS.begin(), VALIDATION_LAYERS.end()},
             .extensions = extensions,
@@ -70,34 +71,49 @@ std::unique_ptr<GlobalRenderer> register_vulkan_systems(flecs::world& world, std
         .event(flecs::OnAdd)
         .each([](flecs::entity e, CWindow& window, const TRequiresVulkan&)
         {
-            GlobalRenderer* renderer = e.world().get_mut<CGlobalRendererRef>()->ref;
+            auto* kek = e.world().get_mut<CGlobalRendererRef>();
+            RenderingSubsystem* renderingSystem = kek->ref;
 
             VkSurfaceKHR surface;
-            auto res = glfwCreateWindowSurface(renderer->getInstance(), window.glfw_window.get(), nullptr, &surface);
+            auto res = glfwCreateWindowSurface(renderingSystem->getInstance(), window.glfw_window.get(), nullptr, &surface);
             NG_VERIFYF(res == VK_SUCCESS, "Unable to create VK surface!");
 
             auto unique_surface = vk::UniqueSurfaceKHR{
                     surface,
-                    vk::ObjectDestroy<vk::Instance, VULKAN_HPP_DEFAULT_DISPATCHER_TYPE>{renderer->getInstance()}
+                    vk::ObjectDestroy<vk::Instance, VULKAN_HPP_DEFAULT_DISPATCHER_TYPE>{renderingSystem->getInstance()}
                 };
 
-            (void) renderer->makeWindowRenderer(
-                        std::move(unique_surface),
-                        [window = window.glfw_window.get()]()
-                            -> vk::Extent2D
-                        {
-                            int width, height;
-                            glfwGetFramebufferSize(window, &width, &height);
 
-                            while (width == 0 || height == 0)
+            // TODO: replace with asyncThisFrame.
+            // Right now this won't work, as TRequiresVulkan gets added from this init system :(
+            unifex::sync_wait(
+                [renderingSystem, surface = std::move(unique_surface), window = window.glfw_window.get()] // NOLINT
+                () mutable
+                    -> unifex::task<void>
+                {
+                    co_await unifex::schedule(g_engine.mainScheduler());
+
+                    co_await renderingSystem->makeVkWindow(
+                            std::move(surface),
+                            [window]() // NOLINT
+                                    -> unifex::task<vk::Extent2D>
                             {
-                                glfwWaitEvents();
+                                int width, height;
                                 glfwGetFramebufferSize(window, &width, &height);
-                            }
 
-                            return vk::Extent2D{static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
-                        }
+                                while (width == 0 || height == 0)
+                                {
+                                    co_await unifex::schedule(g_engine.blockingScheduler());
+                                    glfwWaitEvents();
+                                    glfwGetFramebufferSize(window, &width, &height);
+                                }
+
+                                co_return vk::Extent2D{static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
+                            }
                     );
+
+                    co_return;
+                }());
 
             (void) e.remove<TRequiresVulkan>();
         });
