@@ -56,4 +56,5 @@ private:
     std::size_t inflight_frames_ {2}; // TODO: replace with a config
 
     unifex::async_scope* current_frame_scope_{nullptr}; // TODO: should probably become atomic further down the line.
+    ThreadPool::Scheduler::Sender os_polling_sender_{};
 };

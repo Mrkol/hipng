@@ -27,6 +27,11 @@ public:
     explicit EngineHandle(Engine* engine) : engine_{engine} {}
 
     /**
+     * Use this sender for OS event polling (or else windows will get angry)
+     */
+    ThreadPool::Scheduler::Sender scheduleOsPolling();
+
+    /**
      * Use this scheduler for most work.
      */
     ThreadPool::Scheduler mainScheduler();

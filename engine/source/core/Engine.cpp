@@ -54,11 +54,16 @@ unifex::task<int> Engine::mainEventLoop()
 {
     co_await unifex::schedule(g_engine.mainScheduler());
 
-    spdlog::info("Game loop starting");
+    
+    std::stringstream strm;
+    strm << std::this_thread::get_id();
+    spdlog::info("Game loop starting on tid {}", strm.str());
 
     // We have to poll GLFW on the same thread the window got created :/
     run_all(query_for_tag<TGameLoopStarting>(world_));
-    auto reschedule = unifex::schedule_with_subscheduler(g_engine.mainScheduler());
+
+    // Kostyl, but it works.
+    os_polling_sender_ = unifex::schedule_with_subscheduler(g_engine.mainScheduler());
 
     auto render_windows = world_.query<CWindow>();
 
@@ -69,7 +74,7 @@ unifex::task<int> Engine::mainEventLoop()
 
     while (!should_quit)
     {
-        co_await reschedule;
+        co_await os_polling_sender_;
 
         unifex::async_scope frame_scope;
         current_frame_scope_ = &frame_scope;

@@ -3,6 +3,11 @@
 #include "core/Engine.hpp"
 
 
+ThreadPool::Scheduler::Sender EngineHandle::scheduleOsPolling()
+{
+    return engine_->os_polling_sender_;
+}
+
 ThreadPool::Scheduler EngineHandle::mainScheduler()
 {
     return engine_->main_thread_pool_.get_scheduler();
