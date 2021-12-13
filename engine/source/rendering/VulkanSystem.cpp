@@ -104,9 +104,6 @@ std::unique_ptr<RenderingSubsystem> register_vulkan_systems(flecs::world& world,
                                 while (width == 0 || height == 0)
                                 {
                                     co_await g_engine.scheduleOsPolling();
-                                    std::stringstream strm;
-                                    strm << std::this_thread::get_id();
-                                    spdlog::info("Sleeping in TID: {}", strm.str());
                                     glfwWaitEvents();
                                     glfwGetFramebufferSize(window, &width, &height);
                                 }

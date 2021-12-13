@@ -55,9 +55,7 @@ unifex::task<int> Engine::mainEventLoop()
     co_await unifex::schedule(g_engine.mainScheduler());
 
     
-    std::stringstream strm;
-    strm << std::this_thread::get_id();
-    spdlog::info("Game loop starting on tid {}", strm.str());
+    spdlog::info("Game loop starting");
 
     // We have to poll GLFW on the same thread the window got created :/
     run_all(query_for_tag<TGameLoopStarting>(world_));
