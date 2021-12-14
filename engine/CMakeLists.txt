@@ -18,6 +18,8 @@ target_compile_definitions(
 	VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
 	VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
 	TINYGLTF_USE_CPP14
+	ASIO_HAS_IO_URING
+	ASIO_DISABLE_EPOLL
 	)
 
 target_include_directories(hipengine
@@ -40,6 +42,7 @@ target_link_libraries(hipengine
 	flecs::flecs_static
 	VulkanMemoryAllocator
 	DearImGui
+	asio
 
 	PRIVATE
 	cxxopts
