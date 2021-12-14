@@ -77,10 +77,3 @@ CPMAddPackage(
     GITHUB_REPOSITORY gabime/spdlog
     VERSION 1.9.2
 )
-
-CPMAddPackage(
-  NAME asiocmake
-  GIT_REPOSITORY "https://github.com/OlivierLDff/asio.cmake"
-  GIT_TAG "main"
-  OPTIONS "ASIO_USE_CPM ON"
-)
