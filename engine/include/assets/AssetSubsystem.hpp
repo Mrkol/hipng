@@ -21,6 +21,5 @@ public:
 	unifex::task<tinygltf::Model> loadModel(std::filesystem::path relative_path); 
 
 private:
-	tinygltf::TinyGLTF loader_;
 	std::filesystem::path base_path_;
 };

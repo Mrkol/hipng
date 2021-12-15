@@ -18,6 +18,11 @@ BlockingThreadPool::Scheduler EngineHandle::blockingScheduler()
     return engine_->blocking_thread_pool_.get_scheduler();
 }
 
+AsioContext::Scheduler EngineHandle::ioScheduler()
+{
+    return engine_->io_context_.get_scheduler();
+}
+
 void EngineHandle::asyncThisFrame(unifex::task<void> task)
 {
     NG_ASSERTF(engine_->current_frame_scope_ != nullptr, "asyncThisFrame can only be called from a frame context!");

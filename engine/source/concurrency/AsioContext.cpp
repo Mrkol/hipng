@@ -1,13 +1,47 @@
 #include "concurrency/AsioContext.hpp"
 
+#include <spdlog/spdlog.h>
 
-AsioContext::AsyncFile<FileIOFlags::Read> tag_invoke(
+#include "util/Assert.hpp"
+
+
+AsioContext::AsioContext()
+	: polling_thread_{[this]()
+	{
+		for (;;)
+		{
+			try
+			{
+				context_.run();
+				// Run ended gracefully
+				break;
+			}
+			catch (std::exception& e)
+			{
+				spdlog::error("Exception thrown in ASIO context: {}", e.what());
+			}
+			catch (...)
+			{
+				NG_PANIC("Something incomprehensible thrown in ASIO context. Terminating immediately.");
+			}
+		}
+	}}
+{
+}
+
+AsioContext::~AsioContext()
+{
+	context_.stop();
+	polling_thread_.join();
+}
+
+AsyncFile<FileIOFlags::Read> tag_invoke(
 	unifex::tag_t<unifex::open_file_read_only>,
 	AsioContext::Scheduler s, const std::filesystem::path& path)
 {
-	return AsioContext::AsyncFile<FileIOFlags::Read>(*s.context_,
-		asio::stream_file(
-			s.context_->context_, path.string().c_str(),
+	return AsyncFile<FileIOFlags::Read>(
+		asio::random_access_file(
+			*s.context_, path.string().c_str(),
 			asio::stream_file::read_only
 		));
 }

@@ -6,6 +6,7 @@
 #include <asio.hpp>
 #include <unifex/file_concepts.hpp>
 #include <unifex/receiver_concepts.hpp>
+#include <unifex/task.hpp>
 
 #include "util/EnumFlags.hpp"
 
@@ -34,6 +35,10 @@ public:
     class Scheduler;
     class ReadSender;
 
+    AsioContext();
+
+    ~AsioContext();
+
     Scheduler get_scheduler();
 
 private:
@@ -43,6 +48,7 @@ private:
 
 private:
     asio::io_context context_;
+    std::thread polling_thread_;
 };
 
 class AsioContext::Scheduler
@@ -178,6 +184,23 @@ private:
         requires (FLAGS & FileIOFlags::Read)
     {
         return AsioContext::ReadSender{file.file_, buffer};
+    }
+    
+    unifex::task<std::vector<std::byte>> read()
+        requires (FLAGS & FileIOFlags::Read)
+    {
+        // TODO: rewrite without coroutines
+        std::vector<std::byte> result(file_.size());
+
+        uint64_t already_read = 0;
+        while (already_read < result.size())
+        {
+            std::span buf(result.data() + already_read, result.data() + result.size());
+	        already_read +=
+                co_await unifex::async_read_some_at(*this, already_read, buf);
+        }
+
+        co_return result;
     }
 
     // TODO: write
