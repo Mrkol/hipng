@@ -63,13 +63,14 @@ if (ImGui_ADDED)
     target_link_libraries(DearImGui glfw)
 endif ()
 
+# Adds nlohmann's json and stbimage for free. Not sure whether I like this.
 CPMAddPackage(
-    NAME Assimp
-    GITHUB_REPOSITORY assimp/assimp
-    VERSION 5.0.1
+    NAME tinygltf
+    GITHUB_REPOSITORY syoyo/tinygltf
+    GIT_TAG master
     OPTIONS
-        "ASSIMP_BUILD_TESTS OFF"
-        "ASSIMP_BUILD_ASSIMP_TOOLS OFF"
+        "TINYGLTF_HEADER_ONLY OFF"
+        "TINYGLTF_INSTALL OFF" 
 )
 
 CPMAddPackage(

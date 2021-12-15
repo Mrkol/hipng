@@ -17,6 +17,7 @@ target_compile_definitions(
 	PUBLIC
 	VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
 	VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
+	TINYGLTF_USE_CPP14
 	)
 
 target_include_directories(hipengine
@@ -43,5 +44,5 @@ target_link_libraries(hipengine
 	PRIVATE
 	cxxopts
 	glfw
-	assimp::assimp
+	tinygltf
 	)

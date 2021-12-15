@@ -58,7 +58,7 @@ std::unique_ptr<RenderingSubsystem> register_vulkan_systems(flecs::world& world,
     std::vector extensions(glfwExts, glfwExts + glfwExtCount);
     extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 
-    auto result = std::make_unique<RenderingSubsystem>(GlobalRendererCreateInfo{
+    auto result = std::make_unique<RenderingSubsystem>(RenderingSubsystem::CreateInfo{
             .app_info = application_info,
             .layers = std::span{VALIDATION_LAYERS.begin(), VALIDATION_LAYERS.end()},
             .extensions = extensions,

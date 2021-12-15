@@ -15,7 +15,7 @@
 constexpr std::array DEVICE_EXTENSIONS {static_cast<const char*>(VK_KHR_SWAPCHAIN_EXTENSION_NAME)};
 
 
-RenderingSubsystem::RenderingSubsystem(GlobalRendererCreateInfo info)
+RenderingSubsystem::RenderingSubsystem(CreateInfo info)
     : inflight_mutex_(std::in_place)
 {
     instance_ = vk::createInstanceUnique(vk::InstanceCreateInfo{

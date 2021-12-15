@@ -14,17 +14,17 @@
 #include "rendering/primitives/InflightResource.hpp"
 
 
-struct GlobalRendererCreateInfo
-{
-    vk::ApplicationInfo app_info;
-    std::span<const char* const> layers;
-    std::span<const char* const> extensions;
-};
-
 class RenderingSubsystem
 {
 public:
-    explicit RenderingSubsystem(GlobalRendererCreateInfo info);
+	struct CreateInfo
+	{
+	    vk::ApplicationInfo app_info;
+	    std::span<const char* const> layers;
+	    std::span<const char* const> extensions;
+	};
+
+    explicit RenderingSubsystem(CreateInfo info);
 
     /**
      * Warning: other public interface methods should NOT be called from this function.
