@@ -10,6 +10,7 @@
 #include "core/EngineHandle.hpp"
 #include "util/DebugBreak.hpp"
 #include "util/Defer.hpp"
+#include "rendering/actors/StaticMesh.hpp"
 
 
 constexpr std::array DEVICE_EXTENSIONS {static_cast<const char*>(VK_KHR_SWAPCHAIN_EXTENSION_NAME)};
