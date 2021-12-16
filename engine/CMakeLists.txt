@@ -18,9 +18,12 @@ target_compile_definitions(
 	VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
 	VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
 	TINYGLTF_USE_CPP14
-	ASIO_HAS_IO_URING
-	ASIO_DISABLE_EPOLL
 	)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+	target_compile_definitions(hipengine PUBLIC ASIO_HAS_IO_URING ASIO_DISABLE_EPOLL)
+endif()
+
 
 target_include_directories(hipengine
 	PUBLIC

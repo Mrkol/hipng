@@ -70,7 +70,7 @@ CPMAddPackage(
     GIT_TAG master
     OPTIONS
         "TINYGLTF_HEADER_ONLY OFF"
-        "TINYGLTF_INSTALL OFF" 
+        "TINYGLTF_INSTALL OFF"
 )
 
 CPMAddPackage(

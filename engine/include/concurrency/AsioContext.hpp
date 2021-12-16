@@ -6,9 +6,15 @@
 #include <asio.hpp>
 #include <unifex/file_concepts.hpp>
 #include <unifex/receiver_concepts.hpp>
+#include <unifex/scheduler_concepts.hpp>
 #include <unifex/task.hpp>
+#include <unifex/on.hpp>
+#include <unifex/let_error.hpp>
+#include <unifex/just_error.hpp>
 
 #include "util/EnumFlags.hpp"
+
+
 
 
 
@@ -33,6 +39,7 @@ class AsioContext
 {
 public:
     class Scheduler;
+    class ScheduleSender;
     class ReadSender;
 
     AsioContext();
@@ -51,18 +58,71 @@ private:
     std::thread polling_thread_;
 };
 
+class AsioContext::ScheduleSender
+{
+public:
+	template <
+	    template <typename...> class Variant,
+	    template <typename...> class Tuple>
+	using value_types = Variant<Tuple<>>;
+
+	template <template <typename...> class Variant>
+	using error_types = Variant<>;
+
+	static constexpr bool sends_done = true;
+
+    ScheduleSender(asio::io_context& context)
+	    : context_{&context}
+    {
+    }
+
+private:
+    template<class Receiver>
+    class Operation
+    {
+    public:
+        Operation(asio::io_context& c, auto&& rec)
+            : context_{c}
+            , receiver_{std::forward<decltype(rec)>(rec)}
+        {
+        }
+
+        void start() noexcept
+        {
+            asio::dispatch(context_, [this](){ receiver_.set_value(); });
+        }
+
+    private:
+	    asio::io_context& context_;
+        Receiver receiver_;
+    };
+
+
+private:
+    asio::io_context* context_;
+};
+
 class AsioContext::Scheduler
 {
+public:
+    explicit Scheduler(asio::io_context& ctx) : context_{&ctx} {}
+
+    ScheduleSender schedule() const
+    {
+	    return ScheduleSender(*context_);
+    }
+
 private:
     friend class AsioContext;
 
-    explicit Scheduler(asio::io_context& ctx) : context_{&ctx} {};
-
+    
     friend AsyncFile<FileIOFlags::Read> tag_invoke(
         unifex::tag_t<unifex::open_file_read_only>,
         Scheduler s, const std::filesystem::path& path);
 
-    // TODO: schedule, schedule_at
+    friend bool operator==(const Scheduler&, const Scheduler&) = default;
+
+    // TODO: schedule_at
 
 private:
     asio::io_context* context_;
@@ -75,24 +135,6 @@ inline AsioContext::Scheduler AsioContext::get_scheduler()
 
 class AsioContext::ReadSender
 {
-public:
-    // Produces number of bytes read.
-    template <
-        template <typename...> class Variant,
-        template <typename...> class Tuple>
-    using value_types = Variant<Tuple<std::size_t>>;
-
-    // Note: Only case it might complete with exception_ptr is if the
-    // receiver's set_value() exits with an exception.
-    template <template <typename...> class Variant>
-    using error_types = Variant<asio::error_code, std::exception_ptr>;
-
-    static constexpr bool sends_done = true;
-
-private:
-    template<FileIOFlags>
-    friend class AsyncFile;
-
     template<class Receiver>
     class Operation
     {
@@ -149,12 +191,27 @@ private:
         Receiver receiver_;
     };
 
+public:
+    // Produces number of bytes read.
+    template <
+        template <typename...> class Variant,
+        template <typename...> class Tuple>
+    using value_types = Variant<Tuple<std::size_t>>;
+
+    // Note: Only case it might complete with exception_ptr is if the
+    // receiver's set_value() exits with an exception.
+    template <template <typename...> class Variant>
+    using error_types = Variant<asio::error_code, std::exception_ptr>;
+
+    static constexpr bool sends_done = true;
+    
+    // TODO: this should be private, but friending AsyncFile does not work for some reason...
     ReadSender(asio::random_access_file& file, std::uint64_t offset, std::span<std::byte> buffer)
         : file_{&file}
         , offset_{offset}
         , buffer_{buffer}
     {}
-
+    
     template <typename Receiver>
     Operation<std::remove_cvref_t<Receiver>> connect(Receiver&& r) &&
     {
@@ -171,39 +228,51 @@ template<FileIOFlags FLAGS>
 class AsyncFile
 {
 public:
+    using offset_t = std::uint64_t;
+
     AsyncFile(asio::random_access_file file)
 	    : file_{std::move(file)}
     {}
-    
+
 private:
     friend AsioContext::ReadSender tag_invoke(
         unifex::tag_t<unifex::async_read_some_at>,
         AsyncFile& file,
-        std::uint64_t offset,
+        offset_t offset,
         std::span<std::byte> buffer) noexcept
-        requires (FLAGS & FileIOFlags::Read)
+        requires (static_cast<bool>(FLAGS & FileIOFlags::Read))
     {
-        return AsioContext::ReadSender{file.file_, buffer};
+        return AsioContext::ReadSender{file.file_, offset, buffer};
     }
-    
+
+    // TODO: write
+
+public:
+    // Runs on the asio context
     unifex::task<std::vector<std::byte>> read()
-        requires (FLAGS & FileIOFlags::Read)
+        requires (static_cast<bool>(FLAGS & FileIOFlags::Read))
     {
         // TODO: rewrite without coroutines
         std::vector<std::byte> result(file_.size());
 
-        uint64_t already_read = 0;
+        // hack for simplicity
+        AsioContext::Scheduler sched(static_cast<asio::io_context&>(file_.get_executor().context()));
+
+        offset_t already_read = 0;
         while (already_read < result.size())
         {
             std::span buf(result.data() + already_read, result.data() + result.size());
-	        already_read +=
-                co_await unifex::async_read_some_at(*this, already_read, buf);
+            
+	        already_read += co_await
+        		unifex::let_error(unifex::async_read_some_at(*this, already_read, buf),
+                [](auto&&)
+				{
+					return unifex::just_error(std::runtime_error("IO error idk"));
+				});
         }
 
         co_return result;
     }
-
-    // TODO: write
 
 private:
     asio::random_access_file file_;

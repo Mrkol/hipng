@@ -28,7 +28,7 @@ unifex::task<tinygltf::Model> AssetSubsystem::loadModel(std::filesystem::path re
 	auto asset_path = base_path_ / relative_path;
 
 	// note: throws on error
-	auto file = unifex::open_file_read_only(g_engine.blockingScheduler(), asset_path);
+	auto file = unifex::open_file_read_only(g_engine.ioScheduler(), asset_path);
 	auto data = co_await file.read();
 
 	auto ext = relative_path.extension().string();

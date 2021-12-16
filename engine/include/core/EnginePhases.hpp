@@ -19,7 +19,7 @@ flecs::query<> query_for_tag(flecs::world& world)
         .build();
 }
 
-inline void run_all(const flecs::query<>& q)
+inline void run_all(flecs::query<>&& q)
 {
     q.each([](flecs::entity e)
     {

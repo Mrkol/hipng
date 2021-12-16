@@ -70,7 +70,7 @@ public:
             return Sender{pool_};
         }
 
-        friend bool operator==(const Scheduler& a, const Scheduler& b) = default;
+        friend bool operator==(const Scheduler&, const Scheduler&) = default;
 
     private:
         BlockingThreadPool* pool_;
