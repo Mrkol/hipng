@@ -5,7 +5,6 @@
 
 #include "concurrency/ThreadPool.hpp"
 #include "concurrency/BlockingThreadPool.hpp"
-#include "concurrency/AsioContext.hpp"
 
 
 class Engine;
@@ -36,11 +35,6 @@ public:
      * Use this scheduler for most work.
      */
     ThreadPool::Scheduler mainScheduler();
-    
-    /**
-     * Use this scheduler for IO.
-     */
-    AsioContext::Scheduler ioScheduler();
 
     /**
      * Use this scheduler for long, blocking tasks

@@ -49,7 +49,6 @@ private:
     
     ThreadPool main_thread_pool_;
     BlockingThreadPool blocking_thread_pool_;
-    AsioContext io_context_;
 
     std::unique_ptr<RenderingSubsystem> renderer_;
 

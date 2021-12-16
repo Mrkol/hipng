@@ -16,7 +16,6 @@
 #include "rendering/VulkanSystem.hpp"
 
 
-
 EngineHandle g_engine{nullptr};
 
 EngineBase::EngineBase()

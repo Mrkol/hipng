@@ -20,11 +20,6 @@ target_compile_definitions(
 	TINYGLTF_USE_CPP14
 	)
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-	target_compile_definitions(hipengine PUBLIC ASIO_HAS_IO_URING ASIO_DISABLE_EPOLL)
-endif()
-
-
 target_include_directories(hipengine
 	PUBLIC
 	"include"
@@ -45,7 +40,7 @@ target_link_libraries(hipengine
 	flecs::flecs_static
 	VulkanMemoryAllocator
 	DearImGui
-	asio
+	klein::klein
 
 	PRIVATE
 	cxxopts

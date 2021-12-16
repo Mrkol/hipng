@@ -22,4 +22,5 @@ public:
 
 private:
 	std::filesystem::path base_path_;
+	tinygltf::TinyGLTF loader_;
 };
