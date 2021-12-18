@@ -89,5 +89,16 @@ private:
      */
     InflightResource<unifex::async_mutex> inflight_mutex_;
 
+    struct Oneshot
+    {
+        explicit Oneshot(const auto& a, const auto& b) : pool{a}, fence{b} {}
+
+	    // TODO: reconsider this
+	    InflightResource<vk::UniqueCommandPool> pool;
+	    InflightResource<vk::UniqueFence> fence;
+    };
+
+    std::optional<Oneshot> oneshot_;
+
     std::unique_ptr<GpuStorageManager> gpu_storage_manager_;
 };

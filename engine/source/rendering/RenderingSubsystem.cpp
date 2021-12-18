@@ -10,7 +10,6 @@
 #include "core/EngineHandle.hpp"
 #include "util/DebugBreak.hpp"
 #include "util/Defer.hpp"
-#include "rendering/actors/StaticMesh.hpp"
 
 
 constexpr std::array DEVICE_EXTENSIONS {static_cast<const char*>(VK_KHR_SWAPCHAIN_EXTENSION_NAME)};
@@ -117,10 +116,24 @@ RenderingSubsystem::RenderingSubsystem(CreateInfo info)
         allocator_ = {allocator, &vmaDestroyAllocator};
     }
 
+    oneshot_.emplace(
+			[this](std::size_t)
+			{
+				return device_->createCommandPoolUnique(vk::CommandPoolCreateInfo{
+				        .flags = vk::CommandPoolCreateFlagBits::eTransient,
+				        .queueFamilyIndex = graphics_queue_idx_,
+				    });
+			},
+            [this](std::size_t)
+            {
+	            return device_->createFenceUnique(vk::FenceCreateInfo{});
+            }
+		);
+
     gpu_storage_manager_ = std::make_unique<GpuStorageManager>(
         GpuStorageManager::CreateInfo{
-            .device = device_,
-            .allocator = allocator_,
+            .device = device_.get(),
+            .allocator = allocator_.get(),
 		});
 }
 
@@ -209,6 +222,29 @@ unifex::task<void> RenderingSubsystem::renderFrame(std::size_t frame_index)
         window_images.push_back(co_await window->acquireNext(frame_index));
     }
 
+    auto oneshot_pool = oneshot_->pool.get(frame_index)->get();
+
+    Defer defer2{[this, frame_index, oneshot_pool]() { device_->resetCommandPool(oneshot_pool); }};
+
+    auto cb = std::move(device_->allocateCommandBuffersUnique(vk::CommandBufferAllocateInfo{
+        .commandPool = oneshot_pool,
+        .level = vk::CommandBufferLevel::ePrimary,
+        .commandBufferCount = 1,
+    })[0]);
+
+    auto uploads_done = co_await gpu_storage_manager_->frameUpload(frame_index, cb.get());
+
+    auto oneshot_fence = oneshot_->fence.get(frame_index)->get();
+
+    if (!uploads_done.empty())
+    {
+		device_->getQueue(graphics_queue_idx_, 0).submit(std::array{vk::SubmitInfo{
+				.commandBufferCount = 1,
+		        .pCommandBuffers = &cb.get(),
+		    }}, oneshot_fence);
+    }
+    
+    
 
     // TODO: THIS IS A DUMB PROOF OF CONCEPT
     // needs to be alot more intricate than this
@@ -260,6 +296,12 @@ unifex::task<void> RenderingSubsystem::renderFrame(std::size_t frame_index)
         }
     }
 
+    
+    if (!uploads_done.empty())
+    {
+        fences.push_back(oneshot_fence);
+    }
+
     if (!fences.empty())
     {
         co_await unifex::schedule(g_engine.blockingScheduler());
@@ -270,6 +312,11 @@ unifex::task<void> RenderingSubsystem::renderFrame(std::size_t frame_index)
         device_->resetFences(fences);
 
         co_await unifex::schedule(g_engine.mainScheduler());
+    }
+
+    for (auto waiter : uploads_done)
+    {
+	    waiter->set();
     }
 
     for (std::size_t i = 0; i < windows_.size(); ++i)

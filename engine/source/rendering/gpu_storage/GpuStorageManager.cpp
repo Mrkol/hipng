@@ -105,14 +105,15 @@ unifex::task<StaticMesh*> GpuStorageManager::uploadStaticMesh(AssetHandle handle
 
 			auto& mat = result.materials.emplace_back(
 				Material{
-					.base_color = makeGpuImage(base_color),
-					.occlusion_metalic_roughness = makeGpuImage(omr),
 					.ubo =
 						MaterialUBO{
-							.baseColorFactor = material.pbrMetallicRoughness.baseColorFactor,
-							.metallicFactor = material.pbrMetallicRoughness.metallicFactor,
-							.roughnessFactor = material.pbrMetallicRoughness.roughnessFactor
-						}
+							// TODO: base color is actually a vec3, dang
+							//.baseColorFactor = material.pbrMetallicRoughness.baseColorFactor,
+							.metallicFactor = static_cast<float>(material.pbrMetallicRoughness.metallicFactor),
+							.roughnessFactor = static_cast<float>(material.pbrMetallicRoughness.roughnessFactor)
+						},
+					.base_color = makeGpuImage(base_color),
+					.occlusion_metalic_roughness = makeGpuImage(omr),
 				});
 				
 			uploadImage(mat.base_color.get(), base_color);
@@ -210,46 +211,49 @@ unifex::task<StaticMesh*> GpuStorageManager::uploadStaticMesh(AssetHandle handle
 				}
 
 				{
-					std::array<tinygltf::Accessor&, 3> accs{
-						model.accessors[prim.attributes.at("POSITION")],
-						model.accessors[prim.attributes.at("NORMAL")],
-						model.accessors[prim.attributes.at("TEXCOORD_0")]
+					std::array accs{
+						&model.accessors[prim.attributes.at("POSITION")],
+						&model.accessors[prim.attributes.at("NORMAL")],
+						&model.accessors[prim.attributes.at("TEXCOORD_0")]
 					};
-					std::array<tinygltf::BufferView&, 3> views{
-						model.bufferViews[accs[0].bufferView],
-						model.bufferViews[accs[1].bufferView],
-						model.bufferViews[accs[2].bufferView],
+					std::array views{
+						&model.bufferViews[accs[0]->bufferView],
+						&model.bufferViews[accs[1]->bufferView],
+						&model.bufferViews[accs[2]->bufferView],
 					};
-					std::array<tinygltf::Buffer&, 3> buffers{
-						model.buffers[views[0].buffer],
-						model.buffers[views[1].buffer],
-						model.buffers[views[2].buffer],
+					std::array buffers{
+						&model.buffers[views[0]->buffer],
+						&model.buffers[views[1]->buffer],
+						&model.buffers[views[2]->buffer],
 					};
 
-					std::array<uint32_t, 3> sizes{
-						tinygltf::GetComponentSizeInBytes(accs[0].componentType)
-							* tinygltf::GetNumComponentsInType(accs[0].type),
-						tinygltf::GetComponentSizeInBytes(accs[1].componentType)
-							* tinygltf::GetNumComponentsInType(accs[1].type),
-						tinygltf::GetComponentSizeInBytes(accs[2].componentType)
-							* tinygltf::GetNumComponentsInType(accs[2].type),
+					std::array sizes{
+						static_cast<uint32_t>(
+							tinygltf::GetComponentSizeInBytes(accs[0]->componentType)
+							* tinygltf::GetNumComponentsInType(accs[0]->type)),
+						static_cast<uint32_t>(
+							tinygltf::GetComponentSizeInBytes(accs[1]->componentType)
+							* tinygltf::GetNumComponentsInType(accs[1]->type)),
+						static_cast<uint32_t>(
+							tinygltf::GetComponentSizeInBytes(accs[2]->componentType)
+							* tinygltf::GetNumComponentsInType(accs[2]->type)),
 					};
 
 					auto idx_start = offset;
-					std::array<const std::byte*, 3> currs{
-						reinterpret_cast<const std::byte*>(buffers[0].data.data()) + accs[0].byteOffset,
-						reinterpret_cast<const std::byte*>(buffers[1].data.data()) + accs[1].byteOffset,
-						reinterpret_cast<const std::byte*>(buffers[2].data.data()) + accs[2].byteOffset,
+					std::array currs{
+						reinterpret_cast<const std::byte*>(buffers[0]->data.data()) + accs[0]->byteOffset,
+						reinterpret_cast<const std::byte*>(buffers[1]->data.data()) + accs[1]->byteOffset,
+						reinterpret_cast<const std::byte*>(buffers[2]->data.data()) + accs[2]->byteOffset,
 					};
 
-					for (std::size_t i = 0; i < accs[0].count; ++i)
+					for (std::size_t i = 0; i < accs[0]->count; ++i)
 					{
 						for (std::size_t j = 0; j < 3; ++j)
 						{
 							std::memcpy(data + offset, currs[j], sizes[j]);
 							offset += sizes[j];
 
-							currs[j] += accs[j].ByteStride(views[j]);
+							currs[j] += accs[j]->ByteStride(*views[j]);
 						}
 					}
 

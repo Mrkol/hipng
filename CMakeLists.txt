@@ -53,29 +53,7 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++ -lc++abi")
 endif()
 
-
-find_program(glslang_validator glslangValidator)
-
-function(target_add_shaders TARGET)
-    list(POP_FRONT ${ARGN})
-
-    set(shader_dir "${CMAKE_CURRENT_BINARY_DIR}/shaders/")
-
-    foreach(GLSL ${ARGN})
-        get_filename_component(FILE_NAME ${GLSL} NAME)
-        set(SPIRV "${shader_dir}/${FILE_NAME}.spv")
-        add_custom_command(
-                OUTPUT ${SPIRV}
-                COMMAND ${CMAKE_COMMAND} -E make_directory ${shader_dir}
-                COMMAND ${glslang_validator} -V ${GLSL} -o ${SPIRV}
-                DEPENDS ${GLSL})
-        list(APPEND SPIRV_BINARY_FILES ${SPIRV})
-    endforeach(GLSL)
-
-    set(custom_target_name "${TARGET}_shaders")
-    add_custom_target(${custom_target_name} DEPENDS ${SPIRV_BINARY_FILES})
-    add_dependencies(${TARGET} ${custom_target_name})
-endfunction()
+include(shaders.cmake)
 
 find_package(Threads)
 include(thirdparty.cmake)

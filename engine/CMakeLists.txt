@@ -23,9 +23,10 @@ target_compile_definitions(
 target_include_directories(hipengine
 	PUBLIC
 	"include"
+	# TODO: make public includes not depend on the shader bridge
+	"shaders" # Shaders are included only for the shader_cpp_bridge files
 	PRIVATE
 	"source"
-	"shaders" # Shaders are included only for the shader_cpp_bridge files
 	)
 
 # We link vulkan pfns dynamically
@@ -40,10 +41,10 @@ target_link_libraries(hipengine
 	flecs::flecs_static
 	VulkanMemoryAllocator
 	DearImGui
-	klein::klein
+	glm 
+	tinygltf
 
 	PRIVATE
 	cxxopts
 	glfw
-	tinygltf
 	)

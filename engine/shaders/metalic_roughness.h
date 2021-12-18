@@ -50,7 +50,7 @@ vec3 BRDF(vec3 base_color, float metallic, float roughness,
                      BLACK,
                      metallic);
 
-    float alphaSq = sq(sq(alpha));
+    float alphaSq = sq(sq(roughness));
 
     // Schlick's approximation
     vec3 F = F0 + (vec3(1.) - F0) * pow((1. - VoH), 5.);

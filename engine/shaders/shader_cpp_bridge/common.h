@@ -3,13 +3,15 @@
 
 #ifdef __cplusplus
 
-#   include <klein/mat4x4.hpp>
-#   include <klein/direction.hpp>
+#   include <glm/mat4x4.hpp>
+#   include <glm/vec4.hpp>
+#   include <glm/vec3.hpp>
+#   include <glm/vec2.hpp>
 
-#   define mat4 kln::mat4x4
-// Vec4 generaly has no meaning in shaders, it can store basically anything
-// therefore we use a general 4-float array in C++
-#   define vec4 std::array<float, 4>
+#   define mat4 glm::mat4x4
+#   define vec4 glm::vec4
+#   define vec3 glm::vec3
+#   define vec2 glm::vec2
 
 #   define DEFAULT(x) = x
 

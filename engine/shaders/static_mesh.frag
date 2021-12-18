@@ -3,15 +3,16 @@
 #extension GL_GOOGLE_include_directive : require
 
 #include "metalic_roughness.h"
+#include "shader_cpp_bridge/static_mesh.h"
 
 
 // INPUTS
 
 layout(location = 0) in vs_out
 {
-    vec3 out_cs_position;
-    vec3 out_cs_normal;
-    vec2 out_uv;
+    vec3 cs_position;
+    vec3 cs_normal;
+    vec2 uv;
 };
 
 
@@ -32,11 +33,14 @@ layout(set = 1, binding = 3) uniform sampler2D normal;
 
 void main()
 {
-    vec4 color = texture(albedo, out_uv);
-    vec4 omr = texture(occlusionMetalicRoughness, out_uv);
+    vec4 color = texture(albedo, uv);
+    vec4 omr = texture(occlusionMetalicRoughness, uv);
 
-    out_fragColor
-        = omr.r * materialUbo.occlusionStrength * globalUbo.ambientLight
-        + BRDF(color.rgb, omr.g * materialUbo.roughnessFactor, omr.b * materialUbo.metalnessFactor,
-            vec3(0, 0, -1), out_cs_position, out_cs_normal);
+    out_fragColor.rgb
+        = omr.r * materialUbo.occlusionStrength * globalUbo.ambientLight.rgb
+        + BRDF(color.rgb,
+            omr.g * materialUbo.roughnessFactor,
+            omr.b * materialUbo.metallicFactor,
+            vec3(0, 0, -1), cs_position,
+            cs_normal);
 }
