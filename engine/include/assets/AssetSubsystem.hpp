@@ -5,6 +5,8 @@
 #include <unifex/task.hpp>
 #include <tiny_gltf.h>
 
+#include "assets/AssetHandle.hpp"
+
 
 class AssetSubsystem
 {
@@ -18,7 +20,7 @@ public:
 
 	explicit AssetSubsystem(CreateInfo info);
 
-	unifex::task<tinygltf::Model> loadModel(std::filesystem::path relative_path); 
+	unifex::task<tinygltf::Model> loadModel(AssetHandle handle);
 
 private:
 	std::filesystem::path base_path_;

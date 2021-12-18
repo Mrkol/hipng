@@ -117,7 +117,11 @@ RenderingSubsystem::RenderingSubsystem(CreateInfo info)
         allocator_ = {allocator, &vmaDestroyAllocator};
     }
 
-
+    gpu_storage_manager_ = std::make_unique<GpuStorageManager>(
+        GpuStorageManager::CreateInfo{
+            .device = device_,
+            .allocator = allocator_,
+		});
 }
 
 unifex::task<Window*> RenderingSubsystem::makeVkWindow(vk::UniqueSurfaceKHR surface, ResolutionProvider resolution_provider)

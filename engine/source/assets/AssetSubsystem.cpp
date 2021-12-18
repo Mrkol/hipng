@@ -10,13 +10,13 @@ AssetSubsystem::AssetSubsystem(CreateInfo info)
 {
 }
 
-unifex::task<tinygltf::Model> AssetSubsystem::loadModel(std::filesystem::path relative_path)
+unifex::task<tinygltf::Model> AssetSubsystem::loadModel(AssetHandle handle)
 {
 	co_await unifex::schedule(g_engine.blockingScheduler());
 
-	auto asset_path = base_path_ / relative_path;
+	auto asset_path = base_path_ / handle.path;
 
-	auto ext = relative_path.extension().string();
+	auto ext = handle.path.extension().string();
 
 	tinygltf::Model result;
 	std::string error;

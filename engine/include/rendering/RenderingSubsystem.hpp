@@ -12,6 +12,7 @@
 #include "rendering/Window.hpp"
 #include "rendering/TempForwardRenderer.hpp"
 #include "rendering/primitives/InflightResource.hpp"
+#include "rendering/gpu_storage/GpuStorageManager.hpp"
 
 
 class RenderingSubsystem
@@ -87,4 +88,6 @@ private:
      * inflight resources.
      */
     InflightResource<unifex::async_mutex> inflight_mutex_;
+
+    std::unique_ptr<GpuStorageManager> gpu_storage_manager_;
 };
