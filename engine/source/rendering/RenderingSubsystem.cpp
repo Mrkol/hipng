@@ -167,6 +167,7 @@ unifex::task<Window*> RenderingSubsystem::makeVkWindow(vk::UniqueSurfaceKHR surf
                                     .queueIndex = 0
                             }),
                     .queue_family = graphics_queue_idx_,
+					.storage_manager = gpu_storage_manager_.get(),
             })).get();
 
     window_renderer_mapping_.emplace(result, renderer);
@@ -207,7 +208,7 @@ VkBool32 RenderingSubsystem::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEX
     return VK_FALSE;
 }
 
-unifex::task<void> RenderingSubsystem::renderFrame(std::size_t frame_index)
+unifex::task<void> RenderingSubsystem::renderFrame(std::size_t frame_index, FramePacket packet)
 {
     auto& inflight_mtx = *inflight_mutex_.get(frame_index);
     Defer defer{[&inflight_mtx]() { inflight_mtx.unlock(); }};
@@ -232,17 +233,17 @@ unifex::task<void> RenderingSubsystem::renderFrame(std::size_t frame_index)
         .commandBufferCount = 1,
     })[0]);
 
-    auto uploads_done = co_await gpu_storage_manager_->frameUpload(frame_index, cb.get());
+    cb->begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+    auto uploads_done = co_await gpu_storage_manager_->frameUpload(cb.get());
+    cb->end();
 
     auto oneshot_fence = oneshot_->fence.get(frame_index)->get();
+    
+	device_->getQueue(graphics_queue_idx_, 0).submit(std::array{vk::SubmitInfo{
+			.commandBufferCount = 1,
+	        .pCommandBuffers = &cb.get(),
+	    }}, oneshot_fence);
 
-    if (!uploads_done.empty())
-    {
-		device_->getQueue(graphics_queue_idx_, 0).submit(std::array{vk::SubmitInfo{
-				.commandBufferCount = 1,
-		        .pCommandBuffers = &cb.get(),
-		    }}, oneshot_fence);
-    }
     
     
 
@@ -255,7 +256,7 @@ unifex::task<void> RenderingSubsystem::renderFrame(std::size_t frame_index)
         if (window_images[i].has_value())
         {
             renderings_done.emplace_back(window_renderer_mapping_[windows_[i].get()]
-                ->render(frame_index, window_images[i]->view, window_images[i]->available));
+                ->render(frame_index, window_images[i]->view, window_images[i]->available, std::move(packet)));
         }
         else
         {
@@ -295,12 +296,9 @@ unifex::task<void> RenderingSubsystem::renderFrame(std::size_t frame_index)
             fences.push_back(sem_fence.value().fence);
         }
     }
-
     
-    if (!uploads_done.empty())
-    {
-        fences.push_back(oneshot_fence);
-    }
+    fences.push_back(oneshot_fence);
+    
 
     if (!fences.empty())
     {
@@ -314,10 +312,7 @@ unifex::task<void> RenderingSubsystem::renderFrame(std::size_t frame_index)
         co_await unifex::schedule(g_engine.mainScheduler());
     }
 
-    for (auto waiter : uploads_done)
-    {
-	    waiter->set();
-    }
+    gpu_storage_manager_->frameUploadDone(std::move(uploads_done));
 
     for (std::size_t i = 0; i < windows_.size(); ++i)
     {

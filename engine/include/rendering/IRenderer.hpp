@@ -1,5 +1,7 @@
 #pragma once
 
+#include "rendering/FramePacket.hpp"
+
 
 class IRenderer
 {
@@ -15,7 +17,8 @@ public:
      * recreation. Keeping track of this should be the renderer's responsibility, the view is the only
      * thing bridging the windowing and rendering systems.
      */
-    virtual RenderingDone render(std::size_t frame_index, vk::ImageView present_image, vk::Semaphore image_available) = 0;
+    virtual RenderingDone render(std::size_t frame_index, vk::ImageView present_image, vk::Semaphore image_available,
+        FramePacket packet) = 0;
 
     /**
      *

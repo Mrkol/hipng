@@ -11,6 +11,7 @@ TempForwardRenderer::TempForwardRenderer(CreateInfo info)
 				.queueFamilyIndex = info.queue_family
 			});
 		}}
+	, storage_manager_{info.storage_manager}
 	, rendering_done_fence_{
 		[&info](std::size_t) -> vk::UniqueFence
 		{
@@ -80,9 +81,12 @@ TempForwardRenderer::TempForwardRenderer(CreateInfo info)
 		.dependencyCount = static_cast<uint32_t>(dependencies.size()),
 		.pDependencies = dependencies.data(),
 	});
+
+
 }
 
-TempForwardRenderer::RenderingDone TempForwardRenderer::render(std::size_t frame_index, vk::ImageView present_image, vk::Semaphore image_available)
+TempForwardRenderer::RenderingDone TempForwardRenderer::render(std::size_t frame_index, vk::ImageView present_image,
+	vk::Semaphore image_available, FramePacket packet)
 {
 	device_.resetCommandPool(cb_pool_.get(frame_index)->get());
 
@@ -106,6 +110,23 @@ TempForwardRenderer::RenderingDone TempForwardRenderer::render(std::size_t frame
 			vk::SubpassBeginInfo{
 				.contents = vk::SubpassContents::eInline
 			});
+
+		std::unordered_set<AssetHandle> models;
+		std::unordered_multimap<AssetHandle, ObjectUBO> sorted;
+		for (auto&& mesh : packet.static_meshes)
+		{
+			models.emplace(mesh.model);
+			sorted.emplace(mesh.model, mesh.ubo);
+		}
+
+		for (auto& model : models)
+		{
+			auto[b, e] = sorted.equal_range(model);
+
+
+
+		}
+		
 
 		cb.endRenderPass2(vk::SubpassEndInfo{});
 	}

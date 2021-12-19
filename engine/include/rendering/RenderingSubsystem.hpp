@@ -10,6 +10,7 @@
 #include "concurrency/EventQueue.hpp"
 #include "util/Assert.hpp"
 #include "rendering/Window.hpp"
+#include "rendering/FramePacket.hpp"
 #include "rendering/TempForwardRenderer.hpp"
 #include "rendering/primitives/InflightResource.hpp"
 #include "rendering/gpu_storage/GpuStorageManager.hpp"
@@ -31,7 +32,7 @@ public:
      * Warning: other public interface methods should NOT be called from this function.
      * That would lead to a asynchronous deadlock :)
      */
-    [[nodiscard]] unifex::task<void> renderFrame(std::size_t frame_index);
+    [[nodiscard]] unifex::task<void> renderFrame(std::size_t frame_index, FramePacket packet);
 
     [[nodiscard]] vk::Instance getInstance() const { return instance_.get(); }
 

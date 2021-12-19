@@ -1,6 +1,6 @@
 #pragma once
 
-#include <flecs/flecs.hpp>
+#include <flecs.h>
 
 #include "assets/AssetHandle.hpp"
 

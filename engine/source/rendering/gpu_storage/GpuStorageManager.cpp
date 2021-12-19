@@ -2,6 +2,7 @@
 
 #include <unifex/on.hpp>
 
+#include "core/EngineHandle.hpp"
 #include "util/Defer.hpp"
 
 
@@ -12,16 +13,18 @@ GpuStorageManager::GpuStorageManager(CreateInfo info)
 {
 }
 
-unifex::task<StaticMesh*> GpuStorageManager::uploadStaticMesh(AssetHandle handle, const tinygltf::Model& model)
+unifex::task<void> GpuStorageManager::uploadStaticMesh(AssetHandle handle, const tinygltf::Model& model)
 {
 	{
-		co_await maps_mtx_.async_lock();
-		Defer defer{[this]() { maps_mtx_.unlock(); }};
+		co_await uploaded_mtx_.async_lock();
+		Defer defer{[this]() { uploaded_mtx_.unlock(); }};
 
-		if (static_meshes_.contains(handle))
+		if (uploaded_assets_.contains(handle))
 		{
-			co_return &static_meshes_.at(handle);
+			co_return;
 		}
+
+		uploaded_assets_.emplace(handle);
 	}
 
 	
@@ -278,19 +281,32 @@ unifex::task<StaticMesh*> GpuStorageManager::uploadStaticMesh(AssetHandle handle
 		std::move(image_uploads.begin(), image_uploads.end(), std::back_inserter(image_uploads_));
 		std::move(buffer_uploads.begin(), buffer_uploads.end(), std::back_inserter(buffer_uploads_));
 		waiters_.emplace_back(&done);
+
+		// This basically forwards the ownership to the rendering job, which stalls
+		// for the tiniest amount possible in order to grab the accumulated uploads
+		static_mesh_uploads_.emplace_back(handle, std::move(result));
 	}
 	uploads_mtx_.unlock();
 
 	co_await unifex::on(g_engine.mainScheduler(), done.async_wait());
-
-	co_return &result;
 }
 
-unifex::task<std::vector<unifex::async_manual_reset_event*>>
-	GpuStorageManager::frameUpload(std::size_t frame_idx, vk::CommandBuffer cb)
+StaticMesh* GpuStorageManager::getStaticMesh(AssetHandle handle)
+{
+	auto it = static_meshes_.find(handle);
+	if (it == static_meshes_.end())
+	{
+		return nullptr;
+	}
+
+	return &it->second;
+}
+
+unifex::task<GpuStorageManager::UploadResult> GpuStorageManager::frameUpload(vk::CommandBuffer cb)
 {
 	decltype(buffer_uploads_) buffer_uploads;
 	decltype(image_uploads_) image_uploads;
+	decltype(static_mesh_uploads_) static_mesh_uploads;
 	decltype(waiters_) waiters;
 	{
 		co_await uploads_mtx_.async_lock();
@@ -349,5 +365,18 @@ unifex::task<std::vector<unifex::async_manual_reset_event*>>
 	};
     cb.pipelineBarrier2KHR(dep);
 	
-	co_return std::move(waiters);
+	co_return UploadResult{std::move(waiters), std::move(static_mesh_uploads)};
+}
+
+void GpuStorageManager::frameUploadDone(UploadResult result)
+{
+	for (auto&& p : result.static_meshes)
+	{
+		static_meshes_.emplace(std::move(p));
+	}
+
+	for (auto waiter : result.waiters)
+	{
+		waiter->set();
+	}
 }

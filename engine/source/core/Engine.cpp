@@ -14,6 +14,7 @@
 #include "core/DependencySystem.hpp"
 #include "core/WindowSystem.hpp"
 #include "rendering/VulkanSystem.hpp"
+#include "rendering/FramePacket.hpp"
 
 
 EngineHandle g_engine{nullptr};
@@ -85,10 +86,17 @@ unifex::task<int> Engine::mainEventLoop()
             std::chrono::duration_cast<std::chrono::duration<float, std::ratio<1, 1>>>(this_tick - last_tick_).count();
         last_tick_ = this_tick;
 
+        FramePacket packet;
+
+        world_.component<CCurrentFramePacket>()
+			.set(CCurrentFramePacket{&packet});
 
         should_quit |= !world_.progress(delta_seconds);
 
-        co_await rendering_scope.spawn_next(renderer_->renderFrame(current_frame_idx_));
+        world_.component<CCurrentFramePacket>()
+			.set(CCurrentFramePacket{nullptr});
+
+        co_await rendering_scope.spawn_next(renderer_->renderFrame(current_frame_idx_, std::move(packet)));
 
         co_await unifex::on(g_engine.mainScheduler(), frame_scope.cleanup());
         current_frame_scope_ = nullptr;
