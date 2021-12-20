@@ -300,15 +300,15 @@ void StaticMeshRenderer::render(std::size_t frame_index, vk::CommandBuffer cb, c
 	std::vector<vk::WriteDescriptorSet> writes;
 	vk::DescriptorBufferInfo global_buffer_write{
 			.buffer = per_frame.global_ubo.get(),
-			.range = VK_WHOLE_SIZE,
+			.range = sizeof(GlobalUBO),
 		};
 	vk::DescriptorBufferInfo material_buffer_write{
 			.buffer = per_frame.material_ubos.get(),
-			.range = VK_WHOLE_SIZE,
+			.range = sizeof(MaterialUBO),
 		};
 	vk::DescriptorBufferInfo object_buffer_write{
 			.buffer = per_frame.object_ubos.get(),
-			.range = VK_WHOLE_SIZE,
+			.range = sizeof(ObjectUBO),
 		};
 	std::vector<vk::DescriptorImageInfo> texture_writes;
 	texture_writes.reserve(materials.size() * 2);

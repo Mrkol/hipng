@@ -92,6 +92,16 @@ unifex::task<int> Engine::mainEventLoop()
 			.model = avocado,
             .scale = 1000,
 		});
+    
+    world_.entity("AVOCADINA2")
+		.set<CPosition>(CPosition{
+			.position = {0, 0, 0},
+			.rotation = glm::quat({0, glm::pi<float>()/4, -glm::pi<float>()/4}),
+		})
+		.set<CStaticMeshActor>(CStaticMeshActor{
+			.model = avocado,
+            .scale = 1000,
+		});
 
     world_.entity("camera")
 		.set<CPosition>(CPosition{

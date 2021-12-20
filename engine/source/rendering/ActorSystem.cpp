@@ -18,18 +18,19 @@ void register_actor_systems(flecs::world& world)
 				it.world().component<CCurrentFramePacket>().get<CCurrentFramePacket>()->packet;
 			NG_ASSERT(packet != nullptr);
 
-			auto i = *it.begin();
+			for (auto i : it)
+			{
+				auto mat = actor[i].scale * mat4_cast(position[i].rotation) *
+					translate(glm::identity<glm::mat4x4>(), position[i].position);
 
-			auto mat = actor[i].scale * mat4_cast(position[i].rotation) *
-				translate(glm::identity<glm::mat4x4>(), position[i].position);
-
-			packet->static_meshes.emplace_back(StaticMeshPacket{
-				.ubo = ObjectUBO{
-					.model = mat,
-					.normal = transpose(inverse(mat)),
-				},
-				.model = actor->model,
-			});
+				packet->static_meshes.emplace_back(StaticMeshPacket{
+					.ubo = ObjectUBO{
+						.model = mat,
+						.normal = transpose(inverse(mat)),
+					},
+					.model = actor->model,
+				});
+			}
 		});
 
     world.system<CCameraActor, CPosition>("Send camera to rendering")
