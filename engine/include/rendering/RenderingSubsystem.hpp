@@ -42,6 +42,8 @@ public:
      */
     [[nodiscard]] unifex::task<Window*> makeVkWindow(vk::UniqueSurfaceKHR surface, ResolutionProvider resolution_provider);
 
+    [[nodiscard]] GpuStorageManager& getGpuStorageManager() { return *gpu_storage_manager_; }
+
 private:
     template<std::invocable<const vk::QueueFamilyProperties&> F>
     uint32_t findQueue(F&& f) const

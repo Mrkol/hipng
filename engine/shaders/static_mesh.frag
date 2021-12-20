@@ -28,7 +28,6 @@ layout(set = 0, binding = 0) uniform GUBO { GlobalUBO globalUbo; };
 layout(set = 1, binding = 0) uniform MUBO { MaterialUBO materialUbo; };
 layout(set = 1, binding = 1) uniform sampler2D albedo;
 layout(set = 1, binding = 2) uniform sampler2D occlusionMetalicRoughness;
-layout(set = 1, binding = 3) uniform sampler2D normal;
 
 
 void main()

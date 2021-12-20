@@ -1,12 +1,31 @@
 #include "rendering/StaticMeshRenderer.hpp"
 
+#include <unordered_set>
+
+#include "assets/AssetHandle.hpp"
+#include "rendering/gpu_storage/GpuStorageManager.hpp"
 #include "rendering/primitives/Shader.hpp"
+#include "shader_cpp_bridge/static_mesh.h"
+#include "util/Align.hpp"
 
 
 StaticMeshRenderer::StaticMeshRenderer(CreateInfo info)
 	: device_{info.device}
+	, allocator_{info.allocator}
 	, ds_pool_{info.ds_pool}
+	, storage_manager_{info.storage_manager}
+	, per_frame_dses_{std::in_place}
 {
+	sampler_ = device_.createSamplerUnique(vk::SamplerCreateInfo{
+		.magFilter = vk::Filter::eLinear,
+		.minFilter = vk::Filter::eLinear,
+		.mipmapMode = vk::SamplerMipmapMode::eLinear,
+		.addressModeU = vk::SamplerAddressMode::eClampToBorder,
+		.addressModeV = vk::SamplerAddressMode::eClampToBorder,
+		.addressModeW = vk::SamplerAddressMode::eClampToBorder,
+		.borderColor = vk::BorderColor::eIntOpaqueBlack,
+	});
+
 	std::array global_bindings{
 		vk::DescriptorSetLayoutBinding{
 			.binding = 0,
@@ -24,7 +43,7 @@ StaticMeshRenderer::StaticMeshRenderer(CreateInfo info)
 	std::array material_bindings{
 		vk::DescriptorSetLayoutBinding{
 			.binding = 0,
-			.descriptorType = vk::DescriptorType::eUniformBuffer,
+			.descriptorType = vk::DescriptorType::eUniformBufferDynamic,
 			.descriptorCount = 1,
 			.stageFlags = vk::ShaderStageFlagBits::eFragment
 		},
@@ -39,13 +58,7 @@ StaticMeshRenderer::StaticMeshRenderer(CreateInfo info)
 			.descriptorType = vk::DescriptorType::eCombinedImageSampler,
 			.descriptorCount = 1,
 			.stageFlags = vk::ShaderStageFlagBits::eFragment
-		},
-		vk::DescriptorSetLayoutBinding{
-			.binding = 3,
-			.descriptorType = vk::DescriptorType::eCombinedImageSampler,
-			.descriptorCount = 0,
-			.stageFlags = vk::ShaderStageFlagBits::eFragment
-		},
+		}
 	};
 	
 	material_dsl_ = device_.createDescriptorSetLayoutUnique(vk::DescriptorSetLayoutCreateInfo{
@@ -126,6 +139,11 @@ StaticMeshRenderer::StaticMeshRenderer(CreateInfo info)
 	        .topology = vk::PrimitiveTopology::eTriangleList,
 	    };
 
+		// all dynamic baby
+		vk::PipelineViewportStateCreateInfo viewport_info{
+			.viewportCount = 1,
+			.scissorCount = 1,
+		};
 		
 	    vk::PipelineRasterizationStateCreateInfo rasterizer_info{
 	        .polygonMode = vk::PolygonMode::eFill,
@@ -164,7 +182,7 @@ StaticMeshRenderer::StaticMeshRenderer(CreateInfo info)
 	    };
 
 		std::array dynamic_state{
-			vk::DynamicState::eViewport,
+			vk::DynamicState::eViewport, vk::DynamicState::eScissor
 		};
 
 		vk::PipelineDynamicStateCreateInfo dyn_state_info{
@@ -178,6 +196,7 @@ StaticMeshRenderer::StaticMeshRenderer(CreateInfo info)
 				.pStages = shader_stages.data(),
 				.pVertexInputState = &vertex_input_info,
 				.pInputAssemblyState = &input_assembly_info,
+				.pViewportState = &viewport_info,
 				.pRasterizationState = &rasterizer_info,
 				.pMultisampleState = &multisample_info,
 				.pDepthStencilState = &depth_stencil_info,
@@ -192,7 +211,222 @@ StaticMeshRenderer::StaticMeshRenderer(CreateInfo info)
 	}
 }
 
-void StaticMeshRenderer::render(std::size_t frame_index, vk::CommandBuffer cb)
+void StaticMeshRenderer::render(std::size_t frame_index, vk::CommandBuffer cb, const FramePacket& packet)
 {
+	std::vector<StaticMeshPacket> static_meshes;
+	static_meshes.reserve(packet.static_meshes.size());
+	for (auto& mesh : packet.static_meshes)
+	{
+		if (storage_manager_->getStaticMesh(mesh.model) != nullptr)
+		{
+			static_meshes.emplace_back(mesh);
+		}
+	}
+
+	struct PerMaterial
+	{
+		uint32_t index;
+		std::unordered_set<Meshlet*> meshlets; // drawn for each instance
+		std::vector<uint32_t> objects;
+		StaticMesh* model;
+	};
+
+	uint32_t material_count = 0;
+	uint32_t object_idx = 0;
+	std::unordered_map<Material*, PerMaterial> materials;
+	for (auto&& mesh : static_meshes)
+	{
+		auto model = storage_manager_->getStaticMesh(mesh.model);
+
+		for(auto& meshlet : model->meshlets)
+		{
+			if (!materials.contains(meshlet.material))
+			{
+				materials.emplace(meshlet.material,
+					PerMaterial{
+						.index = material_count++,
+						.model = model,
+					});
+			}
+
+			auto& per = materials.at(meshlet.material);
+			per.meshlets.insert(&meshlet);
+			per.objects.push_back(object_idx);
+		}
+
+		++object_idx;
+	}
+
+	auto& per_frame = per_frame_dses_.get(frame_index)->emplace();
+	
+	auto gubo_size = align(sizeof(GlobalUBO), std::size_t{64});
+	auto mubo_size = align(sizeof(MaterialUBO), std::size_t{64});
+	auto oubo_size = align(sizeof(ObjectUBO), std::size_t{64});
+
+	per_frame.global_ubo = UniqueVmaBuffer(allocator_, gubo_size,
+		vk::BufferUsageFlagBits::eUniformBuffer, VMA_MEMORY_USAGE_CPU_TO_GPU);
+
+	if (material_count > 0)
+	{
+		per_frame.material_ubos = UniqueVmaBuffer(allocator_, mubo_size * material_count,
+			vk::BufferUsageFlagBits::eUniformBuffer, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	}
+
+	if (static_meshes.size() > 0)
+	{
+		per_frame.object_ubos = UniqueVmaBuffer(allocator_, oubo_size * static_meshes.size(),
+			vk::BufferUsageFlagBits::eUniformBuffer, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	}
+	
+	per_frame.materials.resize(material_count);
+
+	{
+		std::vector layouts(material_count, material_dsl_.get());
+		layouts.push_back(global_dsl_.get());
+		layouts.push_back(object_dsl_.get());
+	
+		auto sets = device_.allocateDescriptorSetsUnique(vk::DescriptorSetAllocateInfo{
+				.descriptorPool = ds_pool_,
+				.descriptorSetCount = static_cast<uint32_t>(layouts.size()),
+				.pSetLayouts = layouts.data(),
+			});
+
+		std::move(sets.begin(), sets.end() - 2, per_frame.materials.begin());
+		
+		per_frame.global = std::move(sets[material_count]);
+		per_frame.object = std::move(sets[material_count + 1]);
+	}
+	
+	std::vector<vk::WriteDescriptorSet> writes;
+	vk::DescriptorBufferInfo global_buffer_write{
+			.buffer = per_frame.global_ubo.get(),
+			.range = VK_WHOLE_SIZE,
+		};
+	vk::DescriptorBufferInfo material_buffer_write{
+			.buffer = per_frame.material_ubos.get(),
+			.range = VK_WHOLE_SIZE,
+		};
+	vk::DescriptorBufferInfo object_buffer_write{
+			.buffer = per_frame.object_ubos.get(),
+			.range = VK_WHOLE_SIZE,
+		};
+	std::vector<vk::DescriptorImageInfo> texture_writes;
+	texture_writes.reserve(materials.size() * 2);
+
+	{
+		auto data = per_frame.global_ubo.map();
+
+		std::memcpy(data, &packet.ubo, sizeof(GlobalUBO));
+
+		per_frame.global_ubo.unmap();
+
+		
+		writes.emplace_back(vk::WriteDescriptorSet{
+				.dstSet = per_frame.global.get(),
+				.dstBinding = 0,
+				.descriptorCount = 1,
+				.descriptorType = vk::DescriptorType::eUniformBuffer,
+				.pBufferInfo = &global_buffer_write,
+			});
+	}
+
+	if (material_count > 0)
+	{
+		auto data = per_frame.material_ubos.map();
+
+		for (auto&[material, permat] : materials)
+		{
+			auto mat = data + mubo_size * permat.index;
+
+			std::memcpy(mat, &material->ubo, sizeof(MaterialUBO));
+			
+			writes.emplace_back(vk::WriteDescriptorSet{
+					.dstSet = per_frame.materials[permat.index].get(),
+					.dstBinding = 0,
+					.descriptorCount = 1,
+					.descriptorType = vk::DescriptorType::eUniformBufferDynamic,
+					.pBufferInfo = &material_buffer_write,
+				});
+			
+			writes.emplace_back(vk::WriteDescriptorSet{
+					.dstSet = per_frame.materials[permat.index].get(),
+					.dstBinding = 1,
+					.descriptorCount = 1,
+					.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+					.pImageInfo = &texture_writes.emplace_back(vk::DescriptorImageInfo{
+						.sampler = sampler_.get(),
+						.imageView = material->base_color_view.get(),
+						.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+					})
+				});
+			
+			writes.emplace_back(vk::WriteDescriptorSet{
+					.dstSet = per_frame.materials[permat.index].get(),
+					.dstBinding = 2,
+					.descriptorCount = 1,
+					.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+					.pImageInfo = &texture_writes.emplace_back(vk::DescriptorImageInfo{
+						.sampler = sampler_.get(),
+						.imageView = material->occlusion_metalic_roughness_view.get(),
+						.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+					})
+				});
+		}
+
+		per_frame.material_ubos.unmap();
+	}
+
+	if (static_meshes.size() > 0)
+	{
+		auto data = per_frame.object_ubos.map();
+
+		for(auto& mesh : static_meshes)
+		{
+			std::memcpy(data, &mesh.ubo, sizeof(ObjectUBO));
+
+			data += oubo_size;
+		}
+
+		per_frame.object_ubos.unmap();
+
+		writes.emplace_back(vk::WriteDescriptorSet{
+				.dstSet = per_frame.object.get(),
+				.dstBinding = 0,
+				.descriptorCount = 1,
+				.descriptorType = vk::DescriptorType::eUniformBufferDynamic,
+				.pBufferInfo = &object_buffer_write,
+			});
+	}
+
+	device_.updateDescriptorSets(writes, {});
+
+
 	cb.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_.get());
+
+	cb.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout_.get(), 0, 1,
+		&per_frame.global.get(), 0, nullptr);
+
+	for (auto&[mat, permat] : materials)
+	{
+		uint32_t dyn_offset = permat.index * mubo_size;
+		cb.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout_.get(), 1, 1,
+			&per_frame.materials[permat.index].get(), 1, &dyn_offset);
+
+		cb.bindIndexBuffer(permat.model->index_buffer.get(), 0, vk::IndexType::eUint16);
+		vk::DeviceSize offsets = 0;
+		auto buf = permat.model->vertex_buffer.get();
+		cb.bindVertexBuffers(0, 1, &buf, &offsets);
+
+		for (auto obj_idx : permat.objects)
+		{
+			uint32_t dyn_off_obj = obj_idx * sizeof(ObjectUBO);
+			cb.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout_.get(), 2, 1,
+				&per_frame.object.get(), 1, &dyn_off_obj);
+
+			for (auto meshlet : permat.meshlets)
+			{
+				cb.drawIndexed(meshlet->index_count, 1, meshlet->index_offset, meshlet->vertex_offset, 0);
+			}
+		}
+	}
 }

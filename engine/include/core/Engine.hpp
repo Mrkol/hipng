@@ -8,6 +8,7 @@
 #include "concurrency/ThreadPool.hpp"
 #include "concurrency/BlockingThreadPool.hpp"
 #include "core/EngineHandle.hpp"
+#include "assets/AssetSubsystem.hpp"
 
 
 constexpr auto APP_NAME = "HipNg";
@@ -51,6 +52,7 @@ private:
     BlockingThreadPool blocking_thread_pool_;
 
     std::unique_ptr<RenderingSubsystem> renderer_;
+    std::unique_ptr<AssetSubsystem> asset_subsystem_;
 
     std::size_t current_frame_idx_{0};
     std::size_t inflight_frames_ {2}; // TODO: replace with a config

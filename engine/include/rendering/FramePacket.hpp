@@ -1,14 +1,13 @@
 #pragma once
 
-#include <filesystem>
-
+#include "assets/AssetHandle.hpp"
 #include "shader_cpp_bridge/static_mesh.h"
 
 
 struct StaticMeshPacket
 {
 	ObjectUBO ubo{};
-	std::filesystem::path model;
+	AssetHandle model;
 };
 
 /**

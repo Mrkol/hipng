@@ -12,7 +12,9 @@
 #include "util/Assert.hpp"
 #include "core/EnginePhases.hpp"
 #include "core/DependencySystem.hpp"
+#include "core/GameplaySystem.hpp"
 #include "core/WindowSystem.hpp"
+#include "rendering/ActorSystem.hpp"
 #include "rendering/VulkanSystem.hpp"
 #include "rendering/FramePacket.hpp"
 
@@ -43,6 +45,11 @@ Engine::Engine(int argc, char** argv)
     register_dependency_systems(world_);
     renderer_ = register_vulkan_systems(world_, APP_NAME);
     register_window_systems(world_);
+    register_actor_systems(world_);
+
+    asset_subsystem_ = std::make_unique<AssetSubsystem>(AssetSubsystem::CreateInfo{
+        .base_path = NG_PROJECT_BASEPATH,
+    });
 }
 
 int Engine::run()
@@ -69,6 +76,30 @@ unifex::task<int> Engine::mainEventLoop()
 
     StaticScope<EngineHandle::MAX_INFLIGHT_FRAMES, unifex::task<void>>
 		rendering_scope(g_engine.inflightFrames());
+
+    AssetHandle avocado{"engine/resources/avocado/Avocado.gltf"};
+    auto model = co_await asset_subsystem_->loadModel(avocado);
+    unifex::async_scope global_scope;
+    // LOADING STUFF FROM A DIFFERENT THREAD! POG!
+	global_scope.spawn(renderer_->getGpuStorageManager().uploadStaticMesh(avocado, model));
+
+    world_.entity("AVOCADINA")
+		.set<CPosition>(CPosition{
+			.position = {0, 0, 0},
+			.rotation = glm::quat({0, glm::pi<float>()/4, glm::pi<float>()/4}),
+		})
+		.set<CStaticMeshActor>(CStaticMeshActor{
+			.model = avocado,
+            .scale = 1000,
+		});
+
+    world_.entity("camera")
+		.set<CPosition>(CPosition{
+			.position = {0, -0.1, 0},
+			.rotation = quatLookAt(glm::vec3(1, 0, 0), glm::vec3(0, 0, 1))
+		})
+		.set<CCameraActor>(CCameraActor{ .fovx = 100, .fovy = 90, .near = 0.01f, .far = 100.f })
+		.add<TActiveCamera>();
 
     while (!should_quit)
     {
@@ -103,6 +134,7 @@ unifex::task<int> Engine::mainEventLoop()
     }
 
     co_await rendering_scope.all_finished();
+    co_await unifex::on(g_engine.mainScheduler(), global_scope.cleanup());
 
     run_all(query_for_tag<TGameLoopFinished>(world_));
     

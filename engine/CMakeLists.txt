@@ -18,6 +18,7 @@ target_compile_definitions(
 	VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
 	VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
 	TINYGLTF_USE_CPP14
+	NG_PROJECT_BASEPATH="${PROJECT_SOURCE_DIR}"
 	)
 
 target_include_directories(hipengine

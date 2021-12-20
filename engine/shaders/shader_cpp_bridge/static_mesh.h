@@ -6,8 +6,8 @@
 
 struct ObjectUBO
 {
-    mat4 model;
-    mat4 normal;
+    ngmat4 model;
+    ngmat4 normal;
 };
 
 struct MaterialUBO

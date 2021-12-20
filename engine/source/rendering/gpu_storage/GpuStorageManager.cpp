@@ -48,6 +48,7 @@ unifex::task<void> GpuStorageManager::uploadStaticMesh(AssetHandle handle, const
 	
 	std::vector<vk::CopyBufferToImageInfo2KHR> image_uploads;
 	std::vector<vk::BufferImageCopy2KHR> image_regions;
+	image_regions.reserve(model.materials.size() * 2);
 	std::vector<vk::CopyBufferInfo2KHR> buffer_uploads;
 	std::vector<vk::BufferCopy2KHR> buffer_regions;
 
@@ -77,21 +78,22 @@ unifex::task<void> GpuStorageManager::uploadStaticMesh(AssetHandle handle, const
 					.dstImage = dst,
 					.dstImageLayout = vk::ImageLayout::eTransferDstOptimal,
 					.regionCount = 1,
-					.pRegions = image_regions.data() + image_regions.size(),
-				});
-
-				image_regions.emplace_back(vk::BufferImageCopy2KHR{
-					.bufferOffset = offset,
-					.bufferRowLength = static_cast<uint32_t>(image.width * 4),
-					.bufferImageHeight = static_cast<uint32_t>(image.height),
-					.imageSubresource = vk::ImageSubresourceLayers{
-						.aspectMask = vk::ImageAspectFlagBits::eColor,
-						.mipLevel = 0,
-						.baseArrayLayer = 0,
-						.layerCount = 1
-					},
-					.imageOffset = {0, 0},
-					.imageExtent = {static_cast<uint32_t>(image.width), static_cast<uint32_t>(image.height)},
+					// TODO: THIS IS DANGEROUS
+					.pRegions = &image_regions.emplace_back(vk::BufferImageCopy2KHR{
+							.bufferOffset = offset,
+							.imageSubresource = vk::ImageSubresourceLayers{
+								.aspectMask = vk::ImageAspectFlagBits::eColor,
+								.mipLevel = 0,
+								.baseArrayLayer = 0,
+								.layerCount = 1
+							},
+							.imageOffset = {0, 0, 0},
+							.imageExtent = {
+								static_cast<uint32_t>(image.width),
+								static_cast<uint32_t>(image.height),
+								1,
+							},
+						}),
 				});
 
 				std::memcpy(data + offset, image.image.data(), image.image.size());
@@ -118,6 +120,23 @@ unifex::task<void> GpuStorageManager::uploadStaticMesh(AssetHandle handle, const
 					.base_color = makeGpuImage(base_color),
 					.occlusion_metalic_roughness = makeGpuImage(omr),
 				});
+
+			auto make_view = [this](vk::Image image)
+				{
+					return device_.createImageViewUnique(vk::ImageViewCreateInfo{
+							.image = image,
+							.viewType = vk::ImageViewType::e2D,
+							.format = vk::Format::eR8G8B8A8Srgb,
+							.subresourceRange = vk::ImageSubresourceRange{
+								.aspectMask = vk::ImageAspectFlagBits::eColor,
+								.levelCount = 1,
+								.layerCount = 1,
+							}
+						});
+				};
+
+			mat.base_color_view = make_view(mat.base_color.get());
+			mat.occlusion_metalic_roughness_view = make_view(mat.occlusion_metalic_roughness.get());
 				
 			uploadImage(mat.base_color.get(), base_color);
 			uploadImage(mat.occlusion_metalic_roughness.get(), omr);
@@ -161,11 +180,13 @@ unifex::task<void> GpuStorageManager::uploadStaticMesh(AssetHandle handle, const
 				vertex_offset += vtx_count;
 			}
 		}
+
+		buffer_regions.reserve(2 * result.meshlets.size());
 		
-		result.index_buffer = UniqueVmaBuffer(allocator_, index_offset,
+		result.index_buffer = UniqueVmaBuffer(allocator_, index_offset * sizeof(std::uint16_t),
 			vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer, VMA_MEMORY_USAGE_GPU_ONLY);
 
-		result.vertex_buffer = UniqueVmaBuffer(allocator_, vertex_offset,
+		result.vertex_buffer = UniqueVmaBuffer(allocator_, vertex_offset * sizeof(float) * 8,
 			vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, VMA_MEMORY_USAGE_GPU_ONLY);
 
 		auto uploadBuffer =
@@ -176,13 +197,12 @@ unifex::task<void> GpuStorageManager::uploadStaticMesh(AssetHandle handle, const
 					.srcBuffer = staging.get(),
 					.dstBuffer = target,
 					.regionCount = 1,
-					.pRegions = buffer_regions.data() + buffer_regions.size(),
-				});
-
-				buffer_regions.push_back(vk::BufferCopy2KHR{
-					.srcOffset = src_offset,
-					.dstOffset = target_offset,
-					.size = src_size,
+					// TODO: THIS IS DANGEROUS
+					.pRegions = &buffer_regions.emplace_back(vk::BufferCopy2KHR{
+							.srcOffset = src_offset,
+							.dstOffset = target_offset,
+							.size = src_size,
+						}),
 				});
 			};
 
@@ -200,7 +220,8 @@ unifex::task<void> GpuStorageManager::uploadStaticMesh(AssetHandle handle, const
 						* tinygltf::GetNumComponentsInType(index_acc.type);
 
 					auto idx_start = offset;
-					auto curr = reinterpret_cast<const std::byte*>(index_buf.data.data()) + index_acc.byteOffset;
+					auto curr = reinterpret_cast<const std::byte*>(index_buf.data.data())
+						+ index_view.byteOffset + index_acc.byteOffset;
 					for (std::size_t i = 0; i < index_acc.count; ++i)
 					{
 						std::memcpy(data + offset, curr, sz);
@@ -244,18 +265,28 @@ unifex::task<void> GpuStorageManager::uploadStaticMesh(AssetHandle handle, const
 
 					auto idx_start = offset;
 					std::array currs{
-						reinterpret_cast<const std::byte*>(buffers[0]->data.data()) + accs[0]->byteOffset,
-						reinterpret_cast<const std::byte*>(buffers[1]->data.data()) + accs[1]->byteOffset,
-						reinterpret_cast<const std::byte*>(buffers[2]->data.data()) + accs[2]->byteOffset,
+						reinterpret_cast<const std::byte*>(buffers[0]->data.data())
+							+ views[0]->byteOffset + accs[0]->byteOffset,
+						reinterpret_cast<const std::byte*>(buffers[1]->data.data())
+							+ views[1]->byteOffset + accs[1]->byteOffset,
+						reinterpret_cast<const std::byte*>(buffers[2]->data.data())
+							+ views[2]->byteOffset + accs[2]->byteOffset,
 					};
 
 					for (std::size_t i = 0; i < accs[0]->count; ++i)
 					{
+						// TODO: refactor this crappy swizzle
+						std::memcpy(data + offset, currs[0], sizes[0]);
+						offset += sizes[0];
+						std::memcpy(data + offset, currs[2], sizes[2]/2);
+						offset += sizes[2]/2;
+						std::memcpy(data + offset, currs[1], sizes[1]);
+						offset += sizes[1];
+						std::memcpy(data + offset, currs[2] + sizes[2]/2, sizes[2]/2);
+						offset += sizes[2]/2;
+							
 						for (std::size_t j = 0; j < 3; ++j)
 						{
-							std::memcpy(data + offset, currs[j], sizes[j]);
-							offset += sizes[j];
-
 							currs[j] += accs[j]->ByteStride(*views[j]);
 						}
 					}
@@ -314,6 +345,7 @@ unifex::task<GpuStorageManager::UploadResult> GpuStorageManager::frameUpload(vk:
 
 		buffer_uploads = std::move(buffer_uploads_);
 		image_uploads = std::move(image_uploads_);
+		static_mesh_uploads = std::move(static_mesh_uploads_);
 		waiters = std::move(waiters_);
 
 		if (buffer_uploads.empty() && image_uploads.empty())
@@ -335,11 +367,46 @@ unifex::task<GpuStorageManager::UploadResult> GpuStorageManager::frameUpload(vk:
 
 	for (auto& img : image_uploads)
 	{
+		// barrier only for layout transition, synchronization is done via submits
+	    barriers.emplace_back(vk::ImageMemoryBarrier2KHR{
+			.srcStageMask = {},
+			.srcAccessMask = {},
+			.dstStageMask = vk::PipelineStageFlagBits2KHR::eCopy,
+	        .dstAccessMask = vk::AccessFlagBits2KHR::eTransferWrite,
+	        .oldLayout = vk::ImageLayout::eUndefined,
+	        .newLayout = vk::ImageLayout::eTransferDstOptimal,
+	        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+	        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+	        .image = img.dstImage,
+	        .subresourceRange = vk::ImageSubresourceRange{
+	            vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1,
+	        }
+	    });
+
+	}
+
+	{
+		vk::DependencyInfoKHR dep{
+			.dependencyFlags = {},
+			.memoryBarrierCount = 0,
+			.pMemoryBarriers = nullptr,
+			.bufferMemoryBarrierCount = 0,
+			.pBufferMemoryBarriers = nullptr,
+			.imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size()),
+			.pImageMemoryBarriers = barriers.data(),
+		};
+		cb.pipelineBarrier2KHR(dep);
+	}
+
+	barriers.clear();
+
+	for (auto& img : image_uploads)
+	{
 		cb.copyBufferToImage2KHR(img);
 
 		// barrier only for layout transition, synchronization is done via submits
 	    barriers.emplace_back(vk::ImageMemoryBarrier2KHR{
-			.srcStageMask = vk::PipelineStageFlagBits2KHR::eTransfer,
+			.srcStageMask = vk::PipelineStageFlagBits2KHR::eCopy,
 	        .srcAccessMask = vk::AccessFlagBits2KHR::eTransferWrite,
 			.dstStageMask = {},
 	        .dstAccessMask = {},
@@ -353,17 +420,19 @@ unifex::task<GpuStorageManager::UploadResult> GpuStorageManager::frameUpload(vk:
 	        }
 	    });
 	}
-	
-	vk::DependencyInfoKHR dep{
-		.dependencyFlags = {},
-		.memoryBarrierCount = 0,
-		.pMemoryBarriers = nullptr,
-		.bufferMemoryBarrierCount = 0,
-		.pBufferMemoryBarriers = nullptr,
-		.imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size()),
-		.pImageMemoryBarriers = barriers.data(),
-	};
-    cb.pipelineBarrier2KHR(dep);
+
+	{
+		vk::DependencyInfoKHR dep{
+			.dependencyFlags = {},
+			.memoryBarrierCount = 0,
+			.pMemoryBarriers = nullptr,
+			.bufferMemoryBarrierCount = 0,
+			.pBufferMemoryBarriers = nullptr,
+			.imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size()),
+			.pImageMemoryBarriers = barriers.data(),
+		};
+	    cb.pipelineBarrier2KHR(dep);
+	}
 	
 	co_return UploadResult{std::move(waiters), std::move(static_mesh_uploads)};
 }

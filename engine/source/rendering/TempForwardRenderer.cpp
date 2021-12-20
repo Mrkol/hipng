@@ -3,6 +3,7 @@
 
 TempForwardRenderer::TempForwardRenderer(CreateInfo info)
 	: device_{info.device}
+	, allocator_{info.allocator}
 	, graphics_queue_{info.graphics_queue}
 	, cb_pool_{
 		[&info](std::size_t) -> vk::UniqueCommandPool
@@ -82,7 +83,26 @@ TempForwardRenderer::TempForwardRenderer(CreateInfo info)
 		.pDependencies = dependencies.data(),
 	});
 
+	std::array sizes{
+		vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 100},
+		vk::DescriptorPoolSize{vk::DescriptorType::eUniformBufferDynamic, 100},
+		vk::DescriptorPoolSize{vk::DescriptorType::eSampledImage, 100},
+	};
 
+	descriptor_pool_ = device_.createDescriptorPoolUnique(vk::DescriptorPoolCreateInfo{
+		.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+		.maxSets = 100,
+		.poolSizeCount = static_cast<uint32_t>(sizes.size()),
+		.pPoolSizes = sizes.data(),
+	});
+
+	static_mesh_renderer_ = std::make_unique<StaticMeshRenderer>(StaticMeshRenderer::CreateInfo{
+		.device = device_,
+		.allocator = allocator_,
+		.storage_manager = storage_manager_,
+		.ds_pool = descriptor_pool_.get(),
+		.renderpass = renderpass_.get(),
+	});
 }
 
 TempForwardRenderer::RenderingDone TempForwardRenderer::render(std::size_t frame_index, vk::ImageView present_image,
@@ -97,7 +117,7 @@ TempForwardRenderer::RenderingDone TempForwardRenderer::render(std::size_t frame
 			.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
 		});
 	{
-		vk::ClearValue value = vk::ClearColorValue(std::array{0.5f, 0.f, 0.f, 0.f});
+		vk::ClearValue value = vk::ClearColorValue(std::array{0.1f, 0.1f, 0.1f, 0.f});
 
 		cb.beginRenderPass2(
 			vk::RenderPassBeginInfo{
@@ -111,22 +131,23 @@ TempForwardRenderer::RenderingDone TempForwardRenderer::render(std::size_t frame
 				.contents = vk::SubpassContents::eInline
 			});
 
-		std::unordered_set<AssetHandle> models;
-		std::unordered_multimap<AssetHandle, ObjectUBO> sorted;
-		for (auto&& mesh : packet.static_meshes)
 		{
-			models.emplace(mesh.model);
-			sorted.emplace(mesh.model, mesh.ubo);
+			vk::Viewport viewport{
+				.width = static_cast<float>(resolution_.width),
+				.height = static_cast<float>(resolution_.height),
+				.minDepth = 0,
+				.maxDepth = 1,
+			};
+			cb.setViewport(0, 1, &viewport);
+
+			vk::Rect2D scissor{
+				.extent = resolution_
+			};
+
+			cb.setScissor(0, 1, &scissor);
 		}
 
-		for (auto& model : models)
-		{
-			auto[b, e] = sorted.equal_range(model);
-
-
-
-		}
-		
+		static_mesh_renderer_->render(frame_index, cb, packet);
 
 		cb.endRenderPass2(vk::SubpassEndInfo{});
 	}

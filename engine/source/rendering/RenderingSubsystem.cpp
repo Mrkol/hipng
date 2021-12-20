@@ -12,7 +12,11 @@
 #include "util/Defer.hpp"
 
 
-constexpr std::array DEVICE_EXTENSIONS {static_cast<const char*>(VK_KHR_SWAPCHAIN_EXTENSION_NAME)};
+constexpr std::array DEVICE_EXTENSIONS {
+	static_cast<const char*>(VK_KHR_SWAPCHAIN_EXTENSION_NAME),
+    static_cast<const char*>(VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME),
+    static_cast<const char*>(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME),
+};
 
 
 RenderingSubsystem::RenderingSubsystem(CreateInfo info)
@@ -64,7 +68,12 @@ RenderingSubsystem::RenderingSubsystem(CreateInfo info)
             .tessellationShader = true,
         };
 
+    vk::PhysicalDeviceSynchronization2FeaturesKHR sync2_features{
+        .synchronization2 = true
+    };
+
     device_ = physical_device_.createDeviceUnique(vk::DeviceCreateInfo{
+			.pNext = &sync2_features,
             .queueCreateInfoCount = static_cast<uint32_t>(queue_create_infos.size()),
             .pQueueCreateInfos = queue_create_infos.data(),
             .enabledExtensionCount = static_cast<uint32_t>(DEVICE_EXTENSIONS.size()),
@@ -161,6 +170,7 @@ unifex::task<Window*> RenderingSubsystem::makeVkWindow(vk::UniqueSurfaceKHR surf
     auto renderer = renderers_.emplace_back(new TempForwardRenderer(
             TempForwardRenderer::CreateInfo{
                     .device = device_.get(),
+					.allocator = allocator_.get(),
                     .graphics_queue = device_->getQueue2(
                             vk::DeviceQueueInfo2{
                                     .queueFamilyIndex = graphics_queue_idx_,

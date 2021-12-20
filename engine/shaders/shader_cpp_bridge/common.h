@@ -8,14 +8,19 @@
 #   include <glm/vec3.hpp>
 #   include <glm/vec2.hpp>
 
-#   define mat4 glm::mat4x4
-#   define vec4 glm::vec4
-#   define vec3 glm::vec3
-#   define vec2 glm::vec2
+#   define ngmat4 glm::mat4x4
+#   define ngvec4 glm::vec4
+#   define ngvec3 glm::vec3
+#   define ngvec2 glm::vec2
 
 #   define DEFAULT(x) = x
 
 #else
+
+#   define ngmat4 mat4
+#   define ngvec4 vec4
+#   define ngvec3 vec3
+#   define ngvec2 vec2
 
 #   define DEFAULT(x)
 
@@ -23,15 +28,15 @@
 
 struct GlobalUBO
 {
-    mat4 view;
-    mat4 proj;
-    vec4 ambientLight;
+    ngmat4 view;
+    ngmat4 proj;
+    ngvec4 ambientLight;
 };
 
 struct PointLight
 {
-	vec4 posAndOuterRadius;
-    vec4 colorAndInnerRadius;
+	ngvec4 posAndOuterRadius;
+    ngvec4 colorAndInnerRadius;
 };
 
 #endif // NG_COMMON_H

@@ -3,6 +3,7 @@
 #include <span>
 #include <vulkan/vulkan.hpp>
 
+#include "StaticMeshRenderer.hpp"
 #include "rendering/gpu_storage/GpuStorageManager.hpp"
 #include "rendering/IRenderer.hpp"
 #include "rendering/primitives/InflightResource.hpp"
@@ -14,6 +15,7 @@ public:
 	struct CreateInfo
 	{
 	    vk::Device device;
+		VmaAllocator allocator;
 	    vk::Queue graphics_queue;
 	    uint32_t queue_family;
 		GpuStorageManager* storage_manager;
@@ -36,6 +38,7 @@ public:
 
 private:
 	vk::Device device_;
+	VmaAllocator allocator_;
 	vk::Queue graphics_queue_;
 	InflightResource<vk::UniqueCommandPool> cb_pool_;
 	GpuStorageManager* storage_manager_;
@@ -49,5 +52,7 @@ private:
 
 	InflightResource<vk::UniqueCommandBuffer> main_cb_;
 
-	vk::UniqueDescriptorPool desc_pool_;
+	vk::UniqueDescriptorPool descriptor_pool_;
+
+	std::unique_ptr<StaticMeshRenderer> static_mesh_renderer_;
 };

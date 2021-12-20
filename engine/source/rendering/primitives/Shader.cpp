@@ -15,8 +15,11 @@ void Shader::reload(vk::Device device)
     shader_module_ = {};
     data_.clear();
 
-    auto path = std::filesystem::current_path() / "shaders" / (name_ + ".spv");
-    std::ifstream file{path, std::ios::ate | std::ios::binary};
+    // TODO: remove this kostyl
+    auto path = std::filesystem::current_path().parent_path() / "engine" / "shaders" / (name_ + ".spv");
+
+
+	std::ifstream file{path, std::ios::ate | std::ios::binary};
 
     if (!file.is_open())
     {
