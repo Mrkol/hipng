@@ -185,7 +185,9 @@ public:
     explicit InputHandler(flecs::entity listens_tag) : listens_tag_(std::move(listens_tag)) {
         AddAction("Pidorakshen", {.key = GLFW_KEY_3});
         AddAction("MoveForward", {.key = GLFW_KEY_W});
+        AddAction("MoveLeft", {.key = GLFW_KEY_A});
         AddAction("MoveBackwards", {.key = GLFW_KEY_S});
+        AddAction("MoveRight", {.key = GLFW_KEY_D});
     }
 
     void Update() {

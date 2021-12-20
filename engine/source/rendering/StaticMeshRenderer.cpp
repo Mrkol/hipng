@@ -148,7 +148,7 @@ StaticMeshRenderer::StaticMeshRenderer(CreateInfo info)
 		
 	    vk::PipelineRasterizationStateCreateInfo rasterizer_info{
 	        .polygonMode = vk::PolygonMode::eFill,
-	    	.cullMode = vk::CullModeFlagBits::eFront,
+	    	.cullMode = vk::CullModeFlagBits::eBack,
 	    	.frontFace = vk::FrontFace::eClockwise,
 	        .lineWidth =  1
 	    };

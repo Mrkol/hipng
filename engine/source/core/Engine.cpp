@@ -92,7 +92,7 @@ unifex::task<int> Engine::mainEventLoop()
 		.set<CStaticMeshActor>(CStaticMeshActor{
 			.model = avocado,
             .scale = 1000,
-        }).is_a(world_.entity("ListensToInputEvents"));
+        });
     
     world_.entity("AVOCADINA2")
 		.set<CPosition>(CPosition{
@@ -102,15 +102,16 @@ unifex::task<int> Engine::mainEventLoop()
 		.set<CStaticMeshActor>(CStaticMeshActor{
 			.model = avocado,
             .scale = 1000,
-		}).is_a(world_.entity("ListensToInputEvents"));
+		});
 
     world_.entity("camera")
 		.set<CPosition>(CPosition{
 			.position = {0, -0.1, 0},
 			.rotation = quatLookAt(glm::vec3(1, 0, 0), glm::vec3(0, 0, 1))
 		})
-		.set<CCameraActor>(CCameraActor{ .fov = 100, .near = 0.01f, .far = 100.f })
-		.add<TActiveCamera>();
+		.set<CCameraActor>(CCameraActor{ .fov = 90, .near = 0.01f, .far = 100.f })
+		.add<TActiveCamera>()
+		.is_a(world_.entity("ListensToInputEvents"));
 
     while (!should_quit)
     {

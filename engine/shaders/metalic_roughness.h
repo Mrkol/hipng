@@ -31,10 +31,10 @@ float GGX_D(float alphaSq, float NoH)
 }
 
 vec3 BRDF(vec3 base_color, float metallic, float roughness,
-    vec3 light_direction, vec3 position, vec3 normal)
+    vec3 light_direction, vec3 view, vec3 normal)
 {
     vec3 L = light_direction;
-    vec3 V = position;
+    vec3 V = view;
     vec3 N = normal;
     
     vec3 H = normalize(L+V);

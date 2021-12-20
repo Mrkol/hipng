@@ -40,6 +40,8 @@ void main()
         + BRDF(color.rgb,
             omr.g * materialUbo.roughnessFactor,
             omr.b * materialUbo.metallicFactor,
-            vec3(0, 0, -1), cs_position,
-            cs_normal);
+            vec3(0, -1, 0),
+            vec3(0, 0, 1),
+            normalize(cs_normal));
+
 }
