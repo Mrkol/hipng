@@ -46,6 +46,7 @@ Engine::Engine(int argc, char** argv)
     renderer_ = register_vulkan_systems(world_, APP_NAME);
     register_window_systems(world_);
     register_actor_systems(world_);
+    input_handler_ = InputHandler::register_input_systems(world_);
 
     asset_subsystem_ = std::make_unique<AssetSubsystem>(AssetSubsystem::CreateInfo{
         .base_path = NG_PROJECT_BASEPATH,
@@ -91,7 +92,7 @@ unifex::task<int> Engine::mainEventLoop()
 		.set<CStaticMeshActor>(CStaticMeshActor{
 			.model = avocado,
             .scale = 1000,
-		});
+        }).is_a(world_.entity("ListensToInputEvents"));
     
     world_.entity("AVOCADINA2")
 		.set<CPosition>(CPosition{
@@ -101,7 +102,7 @@ unifex::task<int> Engine::mainEventLoop()
 		.set<CStaticMeshActor>(CStaticMeshActor{
 			.model = avocado,
             .scale = 1000,
-		});
+		}).is_a(world_.entity("ListensToInputEvents"));
 
     world_.entity("camera")
 		.set<CPosition>(CPosition{
@@ -121,6 +122,8 @@ unifex::task<int> Engine::mainEventLoop()
         ++current_frame_idx_;
 
         glfwPollEvents();
+
+        input_handler_->Update();
 
         auto this_tick = Clock::now();
         float delta_seconds =
