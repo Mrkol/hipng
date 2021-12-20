@@ -109,7 +109,7 @@ unifex::task<int> Engine::mainEventLoop()
 			.position = {0, -0.1, 0},
 			.rotation = quatLookAt(glm::vec3(1, 0, 0), glm::vec3(0, 0, 1))
 		})
-		.set<CCameraActor>(CCameraActor{ .fovx = 100, .fovy = 90, .near = 0.01f, .far = 100.f })
+		.set<CCameraActor>(CCameraActor{ .fov = 100, .near = 0.01f, .far = 100.f })
 		.add<TActiveCamera>();
 
     while (!should_quit)

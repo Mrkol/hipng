@@ -108,6 +108,8 @@ TempForwardRenderer::TempForwardRenderer(CreateInfo info)
 TempForwardRenderer::RenderingDone TempForwardRenderer::render(std::size_t frame_index, vk::ImageView present_image,
 	vk::Semaphore image_available, FramePacket packet)
 {
+	packet.aspect = static_cast<float>(resolution_.width) / resolution_.height;
+
 	device_.resetCommandPool(cb_pool_.get(frame_index)->get());
 
 	auto cb = main_cb_.get(frame_index)->get();

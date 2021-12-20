@@ -13,8 +13,7 @@ struct CStaticMeshActor
 
 struct CCameraActor
 {
-	float fovx;
-	float fovy;
+	float fov;
 	float near;
 	float far;
 };

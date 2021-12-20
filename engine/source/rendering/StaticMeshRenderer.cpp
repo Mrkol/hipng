@@ -1,6 +1,7 @@
 #include "rendering/StaticMeshRenderer.hpp"
 
 #include <unordered_set>
+#include <glm/ext/matrix_clip_space.hpp>
 
 #include "assets/AssetHandle.hpp"
 #include "rendering/gpu_storage/GpuStorageManager.hpp"
@@ -314,9 +315,12 @@ void StaticMeshRenderer::render(std::size_t frame_index, vk::CommandBuffer cb, c
 	texture_writes.reserve(materials.size() * 2);
 
 	{
-		auto data = per_frame.global_ubo.map();
+		auto data = reinterpret_cast<GlobalUBO*>(per_frame.global_ubo.map());
 
-		std::memcpy(data, &packet.ubo, sizeof(GlobalUBO));
+		data->view = packet.view;
+		data->proj = glm::perspective(glm::radians(packet.fov / packet.aspect), packet.aspect,
+				packet.near, packet.far);
+		data->ambientLight = {0.3f, 0.3f, 0.3f, 0.f};
 
 		per_frame.global_ubo.unmap();
 

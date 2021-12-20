@@ -15,7 +15,11 @@ struct StaticMeshPacket
  */
 struct FramePacket
 {
-	GlobalUBO ubo{};
+	glm::mat4x4 view;
+	float fov;
+	float aspect; // HANDLED BY RENDERER
+	float near;
+	float far;
 	std::vector<StaticMeshPacket> static_meshes;
 };
 

@@ -26,15 +26,15 @@ class StaticScope
             {
                 try
                 {
-			        std::rethrow_exception(err);
-			    }
-            	catch (const std::exception& e)
+                    std::rethrow_exception(err);
+                }
+                catch (const std::exception& e)
                 {
-			        spdlog::error(e.what());
-			    }
+                    spdlog::error(e.what());
+                }
                 catch(...)
                 {
-	                spdlog::error("Something different from an exception got thrown in the rendering scope!");
+                    spdlog::error("Something different from an exception got thrown in the rendering scope!");
                 }
             }
             std::terminate();

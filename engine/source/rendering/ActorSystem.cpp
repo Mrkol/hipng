@@ -44,10 +44,10 @@ void register_actor_systems(flecs::world& world)
 
 			auto i = *it.begin();
 
-			packet->ubo.view = mat4_cast(position[i].rotation) *
+			packet->view = mat4_cast(position[i].rotation) *
 				translate(glm::identity<glm::mat4x4>(), position[i].position);
-			packet->ubo.proj = glm::perspective(actor[i].fovy, actor[i].fovy / actor[i].fovx,
-				actor[i].near, actor[i].far);
-			packet->ubo.ambientLight = {0.3, 0.3, 0.3, 0};
+			packet->fov = actor[i].fov; 
+			packet->near = actor[i].near; 
+			packet->far = actor[i].far;
 		});
 }
