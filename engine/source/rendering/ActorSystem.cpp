@@ -28,10 +28,14 @@ void register_actor_systems(flecs::world& world)
 				it.world().component<CCurrentFramePacket>().get<CCurrentFramePacket>()->packet;
 			NG_ASSERT(packet != nullptr);
 
+			auto id = glm::identity<glm::mat4>();
+
 			for (auto i : it)
 			{
-				auto mat = translate(scale(mat4_cast(position[i].rotation),
-						glm::vec3(actor[i].scale)), position[i].position);
+				auto mat =
+					translate(id, position[i].position)
+					* scale(id, glm::vec3(actor[i].scale))
+					* mat4_cast(position[i].rotation);
 
 				packet->static_meshes.emplace_back(StaticMeshPacket{
 					.ubo = ObjectUBO{
@@ -54,7 +58,9 @@ void register_actor_systems(flecs::world& world)
 
 			auto i = *it.begin();
 
-			packet->view = inverse(translate(mat4_cast(position[i].rotation), position[i].position));
+			packet->view = inverse(
+				translate(glm::identity<glm::mat4>(), position[i].position)
+				* mat4_cast(position[i].rotation));
 			packet->fov = actor[i].fov; 
 			packet->near = actor[i].near;
 			packet->far = actor[i].far;

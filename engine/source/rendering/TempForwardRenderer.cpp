@@ -41,7 +41,15 @@ TempForwardRenderer::TempForwardRenderer(CreateInfo info)
 			.storeOp = vk::AttachmentStoreOp::eStore,
 			.initialLayout = vk::ImageLayout::eUndefined,
 			.finalLayout = vk::ImageLayout::ePresentSrcKHR,
-		}
+		},
+		vk::AttachmentDescription2 {
+			.format = vk::Format::eD32Sfloat,
+			.samples = vk::SampleCountFlagBits::e1,
+			.loadOp = vk::AttachmentLoadOp::eClear,
+			.storeOp = vk::AttachmentStoreOp::eDontCare,
+			.initialLayout = vk::ImageLayout::eUndefined,
+			.finalLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
+		},
 	};
 	
 
@@ -65,12 +73,19 @@ TempForwardRenderer::TempForwardRenderer(CreateInfo info)
 			.aspectMask = vk::ImageAspectFlagBits::eColor
 		}
 	};
+	
+	vk::AttachmentReference2 depth_attachment_ref {
+		.attachment = 1,
+		.layout = vk::ImageLayout::eDepthStencilAttachmentOptimal,
+		.aspectMask = vk::ImageAspectFlagBits::eDepth
+	};
 
 	std::array subpasses {
 		vk::SubpassDescription2 {
 			.pipelineBindPoint = vk::PipelineBindPoint::eGraphics,
 			.colorAttachmentCount = static_cast<uint32_t>(attachment_refs.size()),
 			.pColorAttachments = attachment_refs.data(),
+			.pDepthStencilAttachment = &depth_attachment_ref,
 		}
 	};
 
@@ -108,7 +123,7 @@ TempForwardRenderer::TempForwardRenderer(CreateInfo info)
 TempForwardRenderer::RenderingDone TempForwardRenderer::render(std::size_t frame_index, vk::ImageView present_image,
 	vk::Semaphore image_available, FramePacket packet)
 {
-	packet.aspect = static_cast<float>(resolution_.width) / resolution_.height;
+	packet.aspect = static_cast<float>(resolution_.width) / static_cast<float>(resolution_.height);
 
 	device_.resetCommandPool(cb_pool_.get(frame_index)->get());
 
@@ -119,15 +134,18 @@ TempForwardRenderer::RenderingDone TempForwardRenderer::render(std::size_t frame
 			.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
 		});
 	{
-		vk::ClearValue value = vk::ClearColorValue(std::array{0.1f, 0.1f, 0.1f, 0.f});
+        std::array clear_vals{
+            vk::ClearValue{vk::ClearColorValue{std::array{0.3f, 0.3f, 0.3f, 1.f}}},
+            vk::ClearValue{vk::ClearDepthStencilValue{1, 0}}
+        };
 
 		cb.beginRenderPass2(
 			vk::RenderPassBeginInfo{
 				.renderPass = renderpass_.get(),
 				.framebuffer = framebuffer_.at(present_image).get(),
 				.renderArea = vk::Rect2D{.offset = {0,0}, .extent = resolution_},
-				.clearValueCount = 1,
-				.pClearValues = &value
+				.clearValueCount = static_cast<uint32_t>(clear_vals.size()),
+				.pClearValues = clear_vals.data()
 			},
 			vk::SubpassBeginInfo{
 				.contents = vk::SubpassContents::eInline
@@ -180,14 +198,34 @@ void TempForwardRenderer::updatePresentationTarget(std::span<vk::ImageView> targ
 {
 	resolution_ = resolution;
 	framebuffer_.clear();
+	
+	{
+		depth_buffer_ = UniqueVmaImage(allocator_, vk::Format::eD32Sfloat,
+			resolution, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, 
+			VMA_MEMORY_USAGE_GPU_ONLY);
+		depth_buffer_view_ = device_.createImageViewUnique(vk::ImageViewCreateInfo{
+			.image = depth_buffer_.get(),
+			.viewType = vk::ImageViewType::e2D,
+			.format = vk::Format::eD32Sfloat,
+			.components = vk::ComponentMapping{},
+			.subresourceRange = vk::ImageSubresourceRange{
+				.aspectMask = vk::ImageAspectFlagBits::eDepth,
+				.baseMipLevel = 0,
+				.levelCount = 1,
+				.baseArrayLayer = 0,
+				.layerCount = 1,
+			}
+		});
+	}
 
 	for (auto image : target)
 	{
+		std::array attachments{image, depth_buffer_view_.get()};
 		framebuffer_.insert(std::make_pair(static_cast<VkImageView>(image), device_.createFramebufferUnique(
 			vk::FramebufferCreateInfo{
 				.renderPass = renderpass_.get(),
-				.attachmentCount = 1,
-				.pAttachments = &image,
+				.attachmentCount = static_cast<uint32_t>(attachments.size()),
+				.pAttachments = attachments.data(),
 				.width = resolution_.width,
 				.height = resolution_.height,
 				.layers = 1,

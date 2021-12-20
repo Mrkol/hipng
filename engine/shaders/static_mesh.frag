@@ -42,7 +42,7 @@ void main()
 
     {
         PointLight light;
-        light.posAndOuterRadius = vec4(0, 0, -10, 0);
+        light.posAndOuterRadius = vec4(-10, 10, 10, 0);
         light.colorAndInnerRadius = vec4(1, 1, 1, 0);
 
         vec3 light_dir =

@@ -99,8 +99,8 @@ unifex::task<int> Engine::mainEventLoop()
 
     world_.entity("AVOCADINA")
         .set<CPosition>(CPosition{
-            .position = {0, 0, 0.5},
-            .rotation = glm::quat({0, 0, glm::pi<float>()/3}),
+            .position = {-0.1f, 0, 0},
+            .rotation = angleAxis(glm::pi<float>(), glm::vec3(0, 1, 0)),
         })
         .set<CStaticMeshActor>(CStaticMeshActor{
             .model = avocado,
@@ -129,7 +129,7 @@ unifex::task<int> Engine::mainEventLoop()
     world_.entity("camera")
         .set<CPosition>(CPosition{
             .position = {0, 0, 1},
-            .rotation = quatLookAt(glm::vec3(1, 0, 0), glm::vec3(0, 1, 0))
+            .rotation = quatLookAt(glm::vec3(0, 0, -1), glm::vec3(0, 1, 0))
         })
         .set<CCameraActor>(CCameraActor{ .fov = 90, .near = 0.01f, .far = 100.f })
         .add<TActiveCamera>()

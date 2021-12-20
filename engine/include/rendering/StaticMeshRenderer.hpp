@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.hpp>
 
 #include "primitives/UniqueVmaBuffer.hpp"
+#include "primitives/UniqueVmaImage.hpp"
 #include "rendering/primitives/InflightResource.hpp"
 #include "rendering/FramePacket.hpp"
 

@@ -87,7 +87,7 @@ StaticMeshRenderer::StaticMeshRenderer(CreateInfo info)
 		.setLayoutCount = static_cast<uint32_t>(dsls.size()),
 		.pSetLayouts = dsls.data(),
 	});
-
+	
 	{
 		Shader vert(device_, "static_mesh.vert");
 		Shader frag(device_, "static_mesh.frag");

@@ -49,6 +49,8 @@ private:
 
 	vk::Extent2D resolution_;
 	std::unordered_map<VkImageView, vk::UniqueFramebuffer> framebuffer_;
+	UniqueVmaImage depth_buffer_;
+	vk::UniqueImageView depth_buffer_view_;
 
 	InflightResource<vk::UniqueCommandBuffer> main_cb_;
 
