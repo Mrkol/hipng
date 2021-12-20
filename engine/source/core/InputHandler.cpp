@@ -11,22 +11,22 @@ std::unique_ptr<InputHandler> InputHandler::register_input_systems(flecs::world 
     world.system<CPosition>()
         .term(world.entity("InputAction_MoveForward_Pressed"))
         .each([](flecs::entity e, CPosition& pos) {
-            pos.position.y += e.delta_time();
+            pos.position.z -= e.delta_time();
         });
     world.system<CPosition>()
         .term(world.entity("InputAction_MoveBackwards_Pressed"))
         .each([](flecs::entity e, CPosition& pos) {
-            pos.position.y -= e.delta_time();
+            pos.position.z += e.delta_time();
         });
     world.system<CPosition>()
         .term(world.entity("InputAction_MoveLeft_Pressed"))
         .each([](flecs::entity e, CPosition& pos) {
-            pos.position.z -= e.delta_time();
+            pos.position.x -= e.delta_time();
         });
     world.system<CPosition>()
         .term(world.entity("InputAction_MoveRight_Pressed"))
         .each([](flecs::entity e, CPosition& pos) {
-            pos.position.z += e.delta_time();
+            pos.position.x += e.delta_time();
         });
 
     return handler;

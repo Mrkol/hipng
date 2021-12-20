@@ -35,13 +35,30 @@ void main()
     vec4 color = texture(albedo, uv);
     vec4 omr = texture(occlusionMetalicRoughness, uv);
 
-    out_fragColor.rgb
-        = omr.r * materialUbo.occlusionStrength * globalUbo.ambientLight.rgb
-        + BRDF(color.rgb,
-            omr.g * materialUbo.roughnessFactor,
-            omr.b * materialUbo.metallicFactor,
-            vec3(0, -1, 0),
-            vec3(0, 0, 1),
-            normalize(cs_normal));
+    vec3 normal = normalize(cs_normal);
 
+    
+    out_fragColor.rgb = omr.r * materialUbo.occlusionStrength * globalUbo.ambientLight.rgb;
+
+    {
+        PointLight light;
+        light.posAndOuterRadius = vec4(0, 0, -10, 0);
+        light.colorAndInnerRadius = vec4(1, 1, 1, 0);
+
+        vec3 light_dir =
+            normalize(vec3(globalUbo.view * vec4(light.posAndOuterRadius.xyz, 1.0)) - cs_position);
+        vec3 light_color = light.colorAndInnerRadius.rgb;
+
+        out_fragColor.rgb +=
+            BRDF(color.rgb,
+                omr.g * materialUbo.roughnessFactor,
+                omr.b * materialUbo.metallicFactor,
+                light_dir,
+                vec3(0, 0, -1),
+                normal)
+            * light_color
+            * dot(light_dir, normal);
+    }
+
+    //out_fragColor.rgb = color.rgb * normal.y;
 }

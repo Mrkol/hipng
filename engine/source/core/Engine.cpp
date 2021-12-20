@@ -7,6 +7,7 @@
 #include <unifex/on.hpp>
 #include <spdlog/spdlog.h>
 #include <GLFW/glfw3.h>
+#include <unifex/let_value.hpp>
 
 #include "concurrency/StaticScope.hpp"
 #include "util/Assert.hpp"
@@ -76,42 +77,63 @@ unifex::task<int> Engine::mainEventLoop()
     bool should_quit = false;
 
     StaticScope<EngineHandle::MAX_INFLIGHT_FRAMES, unifex::task<void>>
-		rendering_scope(g_engine.inflightFrames());
+        rendering_scope(g_engine.inflightFrames());
 
     AssetHandle avocado{"engine/resources/avocado/Avocado.gltf"};
-    auto model = co_await asset_subsystem_->loadModel(avocado);
+    AssetHandle fish{"engine/resources/fish/BarramundiFish.gltf"};
+    AssetHandle lantern{"engine/resources/lantern/Lantern.gltf"};
+    
     unifex::async_scope global_scope;
     // LOADING STUFF FROM A DIFFERENT THREAD! POG!
-	global_scope.spawn(renderer_->getGpuStorageManager().uploadStaticMesh(avocado, model));
+    auto load =
+        [this, &global_scope](AssetHandle handle) -> unifex::task<void>
+        {
+            auto model = co_await asset_subsystem_->loadModel(handle);
+            co_await renderer_->getGpuStorageManager().uploadStaticMesh(handle, model);
+            co_return;
+        };
+    
+    global_scope.spawn(load(avocado));
+    global_scope.spawn(load(fish));
+    global_scope.spawn(load(lantern));
 
     world_.entity("AVOCADINA")
-		.set<CPosition>(CPosition{
-			.position = {0, 0, 0},
-			.rotation = glm::quat({0, glm::pi<float>()/4, glm::pi<float>()/4}),
-		})
-		.set<CStaticMeshActor>(CStaticMeshActor{
-			.model = avocado,
-            .scale = 1000,
+        .set<CPosition>(CPosition{
+            .position = {0, 0, 0.5},
+            .rotation = glm::quat({0, 0, glm::pi<float>()/3}),
+        })
+        .set<CStaticMeshActor>(CStaticMeshActor{
+            .model = avocado,
+            .scale = 1,
         });
     
-    world_.entity("AVOCADINA2")
-		.set<CPosition>(CPosition{
-			.position = {0, 0, 0},
-			.rotation = glm::quat({0, glm::pi<float>()/4, -glm::pi<float>()/4}),
-		})
-		.set<CStaticMeshActor>(CStaticMeshActor{
-			.model = avocado,
-            .scale = 1000,
-		});
+    world_.entity("RYBA")
+        .set<CPosition>(CPosition{
+            .position = {0, 0, 0},
+            .rotation = glm::quat({0, glm::pi<float>()/4, -glm::pi<float>()/4}),
+        })
+        .set<CStaticMeshActor>(CStaticMeshActor{
+            .model = fish,
+            .scale = 0.1f,
+        });
+    
+    world_.entity("LANTERN")
+        .set<CPosition>(CPosition{
+            .rotation = glm::quat({0, 0, 0}),
+        })
+        .set<CStaticMeshActor>(CStaticMeshActor{
+            .model = lantern,
+            .scale = 0.01f,
+        });
 
     world_.entity("camera")
-		.set<CPosition>(CPosition{
-			.position = {0, -0.1, 0},
-			.rotation = quatLookAt(glm::vec3(1, 0, 0), glm::vec3(0, 0, 1))
-		})
-		.set<CCameraActor>(CCameraActor{ .fov = 90, .near = 0.01f, .far = 100.f })
-		.add<TActiveCamera>()
-		.is_a(world_.entity("ListensToInputEvents"));
+        .set<CPosition>(CPosition{
+            .position = {0, 0, 1},
+            .rotation = quatLookAt(glm::vec3(1, 0, 0), glm::vec3(0, 1, 0))
+        })
+        .set<CCameraActor>(CCameraActor{ .fov = 90, .near = 0.01f, .far = 100.f })
+        .add<TActiveCamera>()
+        .is_a(world_.entity("ListensToInputEvents"));
 
     while (!should_quit)
     {
@@ -134,12 +156,12 @@ unifex::task<int> Engine::mainEventLoop()
         FramePacket packet;
 
         world_.component<CCurrentFramePacket>()
-			.set(CCurrentFramePacket{&packet});
+            .set(CCurrentFramePacket{&packet});
 
         should_quit |= !world_.progress(delta_seconds);
 
         world_.component<CCurrentFramePacket>()
-			.set(CCurrentFramePacket{nullptr});
+            .set(CCurrentFramePacket{nullptr});
 
         co_await rendering_scope.spawn_next(renderer_->renderFrame(current_frame_idx_, std::move(packet)));
 

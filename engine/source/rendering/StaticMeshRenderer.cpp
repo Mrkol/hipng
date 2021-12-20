@@ -149,7 +149,7 @@ StaticMeshRenderer::StaticMeshRenderer(CreateInfo info)
 	    vk::PipelineRasterizationStateCreateInfo rasterizer_info{
 	        .polygonMode = vk::PolygonMode::eFill,
 	    	.cullMode = vk::CullModeFlagBits::eBack,
-	    	.frontFace = vk::FrontFace::eClockwise,
+	    	.frontFace = vk::FrontFace::eCounterClockwise,
 	        .lineWidth =  1
 	    };
 
@@ -320,6 +320,8 @@ void StaticMeshRenderer::render(std::size_t frame_index, vk::CommandBuffer cb, c
 		data->view = packet.view;
 		data->proj = glm::perspective(glm::radians(packet.fov / packet.aspect), packet.aspect,
 				packet.near, packet.far);
+		data->proj[1][1] *= -1;
+
 		data->ambientLight = {0.3f, 0.3f, 0.3f, 0.f};
 
 		per_frame.global_ubo.unmap();
@@ -423,7 +425,7 @@ void StaticMeshRenderer::render(std::size_t frame_index, vk::CommandBuffer cb, c
 
 		for (auto obj_idx : permat.objects)
 		{
-			uint32_t dyn_off_obj = obj_idx * sizeof(ObjectUBO);
+			uint32_t dyn_off_obj = obj_idx * oubo_size;
 			cb.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout_.get(), 2, 1,
 				&per_frame.object.get(), 1, &dyn_off_obj);
 

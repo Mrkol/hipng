@@ -30,7 +30,7 @@ layout(set = 2, binding = 0) uniform OUBO { ObjectUBO object_ubo; };
 void main() {
     vec4 screenspace_position = global_ubo.view * object_ubo.model * vec4(position.xyz, 1.0);
 
-    out_cs_position = screenspace_position.xyz / screenspace_position.w;
+    out_cs_position = screenspace_position.xyz;
     out_cs_normal = mat3(global_ubo.view) * mat3(object_ubo.normal) * normal.xyz;
     out_uv = vec2(position.w, normal.w);
 
