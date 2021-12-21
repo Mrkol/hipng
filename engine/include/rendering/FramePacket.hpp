@@ -1,8 +1,13 @@
 #pragma once
 
+#include <unordered_map>
+
 #include "assets/AssetHandle.hpp"
+#include "rendering/gui/GuiFramePacket.hpp"
 #include "shader_cpp_bridge/static_mesh.h"
 
+
+struct ImGuiContext;
 
 struct StaticMeshPacket
 {
@@ -21,6 +26,8 @@ struct FramePacket
 	float near;
 	float far;
 	std::vector<StaticMeshPacket> static_meshes;
+
+	std::unordered_map<ImGuiContext*, GuiFramePacket> gui_packets;
 };
 
 struct CCurrentFramePacket

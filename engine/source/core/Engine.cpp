@@ -163,6 +163,8 @@ unifex::task<int> Engine::mainEventLoop()
         world_.component<CCurrentFramePacket>()
             .set(CCurrentFramePacket{nullptr});
 
+
+
         co_await rendering_scope.spawn_next(renderer_->renderFrame(current_frame_idx_, std::move(packet)));
 
         co_await unifex::on(g_engine.mainScheduler(), frame_scope.cleanup());

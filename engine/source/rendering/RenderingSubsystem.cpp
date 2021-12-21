@@ -146,7 +146,8 @@ RenderingSubsystem::RenderingSubsystem(CreateInfo info)
 		});
 }
 
-unifex::task<Window*> RenderingSubsystem::makeVkWindow(vk::UniqueSurfaceKHR surface, ResolutionProvider resolution_provider)
+unifex::task<Window*> RenderingSubsystem::makeVkWindow(vk::UniqueSurfaceKHR surface,
+    ResolutionProvider resolution_provider, ImGuiContext* gui_context)
 {
     co_await frame_mutex_.async_lock();
     Defer defer{[this]() { frame_mutex_.unlock(); }};
@@ -169,15 +170,18 @@ unifex::task<Window*> RenderingSubsystem::makeVkWindow(vk::UniqueSurfaceKHR surf
     // TODO: REMOVE THIS KOSTYL
     auto renderer = renderers_.emplace_back(new TempForwardRenderer(
             TempForwardRenderer::CreateInfo{
-                    .device = device_.get(),
-					.allocator = allocator_.get(),
-                    .graphics_queue = device_->getQueue2(
-                            vk::DeviceQueueInfo2{
-                                    .queueFamilyIndex = graphics_queue_idx_,
-                                    .queueIndex = 0
-                            }),
-                    .queue_family = graphics_queue_idx_,
-					.storage_manager = gpu_storage_manager_.get(),
+				.instance = instance_.get(),
+				.physical_device = physical_device_,
+                .device = device_.get(),
+				.allocator = allocator_.get(),
+                .graphics_queue = device_->getQueue2(
+                        vk::DeviceQueueInfo2{
+                            .queueFamilyIndex = graphics_queue_idx_,
+                            .queueIndex = 0
+                        }),
+                .queue_family = graphics_queue_idx_,
+				.storage_manager = gpu_storage_manager_.get(),
+				.gui_context = gui_context,
             })).get();
 
     window_renderer_mapping_.emplace(result, renderer);
@@ -266,7 +270,7 @@ unifex::task<void> RenderingSubsystem::renderFrame(std::size_t frame_index, Fram
         if (window_images[i].has_value())
         {
             renderings_done.emplace_back(window_renderer_mapping_[windows_[i].get()]
-                ->render(frame_index, window_images[i]->view, window_images[i]->available, std::move(packet)));
+                ->render(frame_index, window_images[i]->view, window_images[i]->available, packet));
         }
         else
         {

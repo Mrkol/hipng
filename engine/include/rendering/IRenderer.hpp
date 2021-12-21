@@ -18,7 +18,7 @@ public:
      * thing bridging the windowing and rendering systems.
      */
     virtual RenderingDone render(std::size_t frame_index, vk::ImageView present_image, vk::Semaphore image_available,
-        FramePacket packet) = 0;
+        FramePacket& packet) = 0;
 
     /**
      *

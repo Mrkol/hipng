@@ -40,7 +40,8 @@ public:
      * Even if a GLFW window was opened, it doesn't get to use our rendering system until a
      * `Window` counterpart was created for it.
      */
-    [[nodiscard]] unifex::task<Window*> makeVkWindow(vk::UniqueSurfaceKHR surface, ResolutionProvider resolution_provider);
+    [[nodiscard]] unifex::task<Window*> makeVkWindow(vk::UniqueSurfaceKHR surface,
+        ResolutionProvider resolution_provider, ImGuiContext* gui_context);
 
     [[nodiscard]] GpuStorageManager& getGpuStorageManager() { return *gpu_storage_manager_; }
 

@@ -2,6 +2,7 @@
 
 #include <numeric>
 #include <stack>
+#include <backends/imgui_impl_vulkan.h>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <unifex/on.hpp>
@@ -431,8 +432,26 @@ StaticMesh* GpuStorageManager::getStaticMesh(AssetHandle handle)
 	return &it->second;
 }
 
+void GpuStorageManager::uploadGuiData(ImGuiContext* context)
+{
+	std::unique_lock lock {gui_uploads_mtx_};
+	gui_context_uploads_.push_back(context);
+}
+
 unifex::task<GpuStorageManager::UploadResult> GpuStorageManager::frameUpload(vk::CommandBuffer cb)
 {
+	decltype(gui_context_uploads_) gui_context_uploads;
+	{
+		std::unique_lock lock {gui_uploads_mtx_};
+		gui_context_uploads = std::move(gui_context_uploads_);
+	}
+
+	for (auto context : gui_context_uploads)
+	{
+		ImGui::SetCurrentContext(context);
+		ImGui_ImplVulkan_CreateFontsTexture(cb);
+	}
+
 	decltype(buffer_uploads_) buffer_uploads;
 	decltype(image_uploads_) image_uploads;
 	decltype(static_mesh_uploads_) static_mesh_uploads;
@@ -452,7 +471,7 @@ unifex::task<GpuStorageManager::UploadResult> GpuStorageManager::frameUpload(vk:
 			{
 				waiter->set();
 			}
-			co_return {};
+			co_return { .gui_contexts = gui_context_uploads };
 		}
 	}
 
@@ -532,7 +551,11 @@ unifex::task<GpuStorageManager::UploadResult> GpuStorageManager::frameUpload(vk:
 	    cb.pipelineBarrier2KHR(dep);
 	}
 	
-	co_return UploadResult{std::move(waiters), std::move(static_mesh_uploads)};
+	co_return UploadResult{
+		std::move(waiters),
+		std::move(static_mesh_uploads),
+		std::move(gui_context_uploads),
+	};
 }
 
 void GpuStorageManager::frameUploadDone(UploadResult result)
@@ -540,6 +563,12 @@ void GpuStorageManager::frameUploadDone(UploadResult result)
 	for (auto&& p : result.static_meshes)
 	{
 		static_meshes_.emplace(std::move(p));
+	}
+
+	for (auto context : result.gui_contexts)
+	{
+		ImGui::SetCurrentContext(context);
+		ImGui_ImplVulkan_DestroyFontUploadObjects();
 	}
 
 	for (auto waiter : result.waiters)

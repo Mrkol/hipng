@@ -13,6 +13,7 @@ TempForwardRenderer::TempForwardRenderer(CreateInfo info)
 			});
 		}}
 	, storage_manager_{info.storage_manager}
+	, gui_context_{info.gui_context}
 	, rendering_done_fence_{
 		[&info](std::size_t) -> vk::UniqueFence
 		{
@@ -40,7 +41,7 @@ TempForwardRenderer::TempForwardRenderer(CreateInfo info)
 			.loadOp = vk::AttachmentLoadOp::eClear,
 			.storeOp = vk::AttachmentStoreOp::eStore,
 			.initialLayout = vk::ImageLayout::eUndefined,
-			.finalLayout = vk::ImageLayout::ePresentSrcKHR,
+			.finalLayout = vk::ImageLayout::eColorAttachmentOptimal,
 		},
 		vk::AttachmentDescription2 {
 			.format = vk::Format::eD32Sfloat,
@@ -118,10 +119,20 @@ TempForwardRenderer::TempForwardRenderer(CreateInfo info)
 		.ds_pool = descriptor_pool_.get(),
 		.renderpass = renderpass_.get(),
 	});
+
+	gui_manager_recreate_info_ = GuiManager::CreateInfo{
+            .instance = info.instance,
+            .physical_device = info.physical_device,
+            .device = info.device,
+            .graphics_queue_idx = info.queue_family,
+            .graphics_queue = graphics_queue_,
+			.format = vk::Format::eB8G8R8A8Srgb,
+			.context = gui_context_,
+        };
 }
 
 TempForwardRenderer::RenderingDone TempForwardRenderer::render(std::size_t frame_index, vk::ImageView present_image,
-	vk::Semaphore image_available, FramePacket packet)
+	vk::Semaphore image_available, FramePacket& packet)
 {
 	packet.aspect = static_cast<float>(resolution_.width) / static_cast<float>(resolution_.height);
 
@@ -142,7 +153,7 @@ TempForwardRenderer::RenderingDone TempForwardRenderer::render(std::size_t frame
 		cb.beginRenderPass2(
 			vk::RenderPassBeginInfo{
 				.renderPass = renderpass_.get(),
-				.framebuffer = framebuffer_.at(present_image).get(),
+				.framebuffer = framebuffer_.at(present_image).main.get(),
 				.renderArea = vk::Rect2D{.offset = {0,0}, .extent = resolution_},
 				.clearValueCount = static_cast<uint32_t>(clear_vals.size()),
 				.pClearValues = clear_vals.data()
@@ -168,6 +179,31 @@ TempForwardRenderer::RenderingDone TempForwardRenderer::render(std::size_t frame
 		}
 
 		static_mesh_renderer_->render(frame_index, cb, packet);
+
+		cb.endRenderPass2(vk::SubpassEndInfo{});
+
+
+		
+		
+        std::array clear_vals2{
+            vk::ClearValue{vk::ClearColorValue{std::array{0.f, 0.f, 0.f, 1.f}}},
+        };
+		cb.beginRenderPass2(
+			vk::RenderPassBeginInfo{
+				.renderPass = gui_manager_->getRenderPass(),
+				.framebuffer = framebuffer_.at(present_image).gui.get(),
+				.renderArea = vk::Rect2D{.offset = {0,0}, .extent = resolution_},
+				.clearValueCount = static_cast<uint32_t>(clear_vals2.size()),
+				.pClearValues = clear_vals2.data(),
+			},
+			vk::SubpassBeginInfo{
+				.contents = vk::SubpassContents::eInline
+			});
+
+		if (packet.gui_packets.contains(gui_context_))
+		{
+			gui_manager_->render(cb, packet.gui_packets.at(gui_context_));
+		}
 
 		cb.endRenderPass2(vk::SubpassEndInfo{});
 	}
@@ -198,6 +234,12 @@ void TempForwardRenderer::updatePresentationTarget(std::span<vk::ImageView> targ
 {
 	resolution_ = resolution;
 	framebuffer_.clear();
+
+	gui_manager_recreate_info_.swapchain_size = target.size();
+	gui_manager_.reset();
+    gui_manager_ = std::make_unique<GuiManager>(gui_manager_recreate_info_);
+	storage_manager_->uploadGuiData(gui_context_);
+	
 	
 	{
 		depth_buffer_ = UniqueVmaImage(allocator_, vk::Format::eD32Sfloat,
@@ -221,14 +263,27 @@ void TempForwardRenderer::updatePresentationTarget(std::span<vk::ImageView> targ
 	for (auto image : target)
 	{
 		std::array attachments{image, depth_buffer_view_.get()};
-		framebuffer_.insert(std::make_pair(static_cast<VkImageView>(image), device_.createFramebufferUnique(
-			vk::FramebufferCreateInfo{
-				.renderPass = renderpass_.get(),
-				.attachmentCount = static_cast<uint32_t>(attachments.size()),
-				.pAttachments = attachments.data(),
-				.width = resolution_.width,
-				.height = resolution_.height,
-				.layers = 1,
-			})));
+		framebuffer_.insert(std::make_pair(static_cast<VkImageView>(image),
+			Framebuffers{
+				device_.createFramebufferUnique(
+					vk::FramebufferCreateInfo{
+						.renderPass = renderpass_.get(),
+						.attachmentCount = static_cast<uint32_t>(attachments.size()),
+						.pAttachments = attachments.data(),
+						.width = resolution_.width,
+						.height = resolution_.height,
+						.layers = 1,
+					}),
+				device_.createFramebufferUnique(
+					vk::FramebufferCreateInfo{
+						.renderPass = gui_manager_->getRenderPass(),
+						.attachmentCount = 1,
+						.pAttachments = &image,
+						.width = resolution_.width,
+						.height = resolution_.height,
+						.layers = 1,
+					})
+				}
+			));
 	}
 }

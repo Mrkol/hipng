@@ -87,7 +87,9 @@ std::unique_ptr<RenderingSubsystem> register_vulkan_systems(flecs::world& world,
             // TODO: replace with asyncThisFrame.
             // Right now this won't work, as TRequiresVulkan gets added from this init system :(
             unifex::sync_wait(
-                [renderingSystem, surface = std::move(unique_surface), window = window.glfw_window.get()] // NOLINT
+                [renderingSystem, surface = std::move(unique_surface),
+					window = window.glfw_window.get(),
+					gui_context = window.imgui_context.get()] // NOLINT
                 () mutable
                     -> unifex::task<void>
                 {
@@ -109,7 +111,8 @@ std::unique_ptr<RenderingSubsystem> register_vulkan_systems(flecs::world& world,
                                 }
 
                                 co_return vk::Extent2D{static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
-                            }
+                            },
+							gui_context
                     );
 
                     co_return;

@@ -9,8 +9,11 @@
 #include <unifex/async_manual_reset_event.hpp>
 
 #include "assets/AssetHandle.hpp"
+#include "concurrency/Spinlock.hpp"
 #include "rendering/gpu_storage/StaticMesh.hpp"
 
+
+struct ImGuiContext;
 
 class GpuStorageManager
 {
@@ -24,13 +27,16 @@ public:
 	explicit GpuStorageManager(CreateInfo info);
 
 	unifex::task<void> uploadStaticMesh(AssetHandle handle, const tinygltf::Model& model);
-
 	StaticMesh* getStaticMesh(AssetHandle handle);
+
+	void uploadGuiData(ImGuiContext* context);
+
 
 	struct UploadResult
 	{
 		std::vector<unifex::async_manual_reset_event*> waiters;
 		std::vector<std::pair<AssetHandle, StaticMesh>> static_meshes;
+		std::vector<ImGuiContext*> gui_contexts;
 	};
 
 	unifex::task<UploadResult> frameUpload(vk::CommandBuffer cb);
@@ -50,8 +56,11 @@ private:
 	std::vector<unifex::async_manual_reset_event*> waiters_; // guarded by uploads_mtx
 	unifex::async_mutex uploads_mtx_;
 
-	std::unordered_set<AssetHandle> uploaded_assets_; // guarded by maps_mtx_
+	std::unordered_set<AssetHandle> uploaded_assets_; // guarded by uploaded_mtx_
 	unifex::async_mutex uploaded_mtx_;
+
+	std::vector<ImGuiContext*> gui_context_uploads_; // guarded by gui_uploads_mtx_
+	Spinlock gui_uploads_mtx_; // TODO: is this bad? dunno.
 
 	std::unordered_map<AssetHandle, StaticMesh> static_meshes_;
 };

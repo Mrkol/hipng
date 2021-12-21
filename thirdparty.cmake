@@ -42,7 +42,7 @@ endif ()
 CPMAddPackage(
     NAME ImGui
     GITHUB_REPOSITORY ocornut/imgui
-    VERSION 1.84.2
+    GIT_TAG master
     DOWNLOAD_ONLY YES
 )
 
