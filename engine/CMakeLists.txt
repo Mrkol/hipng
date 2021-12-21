@@ -46,6 +46,7 @@ target_link_libraries(hipengine
 	DearImGui
 	glm 
 	tinygltf
+	yaml-cpp
 
 	PRIVATE
 	cxxopts

@@ -1,0 +1,16 @@
+actions:
+  MoveLeft: A
+  MoveRight: D
+  MouseLook: MOUSE_RIGHT
+  Exit: [ESCAPE, CTRL+ALT+Q]
+axes:
+  MoveForward:
+    W: 1.
+    S: -1.
+  MoveUp:
+    SPACE: 1.
+    LEFT_SHIFT: -1.
+  CameraX:
+    MOUSE_X: .3
+  CameraY:
+    MOUSE_Y: .3
