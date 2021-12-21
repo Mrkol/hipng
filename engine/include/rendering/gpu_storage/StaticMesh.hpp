@@ -12,6 +12,7 @@ struct Meshlet
 	uint32_t vertex_offset;
 	uint32_t index_offset;
 	uint32_t index_count;
+	glm::mat4x4 local_transform;
 	Material* material;
 };
 

@@ -224,38 +224,45 @@ void StaticMeshRenderer::render(std::size_t frame_index, vk::CommandBuffer cb, c
 		}
 	}
 
+	struct PerDrawCall
+	{
+		Meshlet* meshlet;
+		uint32_t index;
+		glm::mat4x4 transform;
+	};
+
 	struct PerMaterial
 	{
 		uint32_t index;
-		std::unordered_set<Meshlet*> meshlets; // drawn for each instance
-		std::vector<uint32_t> objects;
+		std::vector<PerDrawCall> per_drawcall;
 		StaticMesh* model;
 	};
 
 	uint32_t material_count = 0;
-	uint32_t object_idx = 0;
-	std::unordered_map<Material*, PerMaterial> materials;
+	uint32_t meshlet_count = 0;
+	std::unordered_map<Material*, PerMaterial> per_material;
 	for (auto&& mesh : static_meshes)
 	{
 		auto model = storage_manager_->getStaticMesh(mesh.model);
 
 		for(auto& meshlet : model->meshlets)
 		{
-			if (!materials.contains(meshlet.material))
+			if (!per_material.contains(meshlet.material))
 			{
-				materials.emplace(meshlet.material,
+				per_material.emplace(meshlet.material,
 					PerMaterial{
 						.index = material_count++,
 						.model = model,
 					});
 			}
 
-			auto& per = materials.at(meshlet.material);
-			per.meshlets.insert(&meshlet);
-			per.objects.push_back(object_idx);
+			auto& per = per_material.at(meshlet.material);
+			per.per_drawcall.emplace_back(PerDrawCall{
+					.meshlet = &meshlet,
+					.index = meshlet_count++,
+					.transform = mesh.transform * meshlet.local_transform,
+				});
 		}
-
-		++object_idx;
 	}
 
 	auto& per_frame = per_frame_dses_.get(frame_index)->emplace();
@@ -273,9 +280,9 @@ void StaticMeshRenderer::render(std::size_t frame_index, vk::CommandBuffer cb, c
 			vk::BufferUsageFlagBits::eUniformBuffer, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	}
 
-	if (static_meshes.size() > 0)
+	if (meshlet_count > 0)
 	{
-		per_frame.object_ubos = UniqueVmaBuffer(allocator_, oubo_size * static_meshes.size(),
+		per_frame.object_ubos = UniqueVmaBuffer(allocator_, oubo_size * meshlet_count,
 			vk::BufferUsageFlagBits::eUniformBuffer, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	}
 	
@@ -312,7 +319,7 @@ void StaticMeshRenderer::render(std::size_t frame_index, vk::CommandBuffer cb, c
 			.range = sizeof(ObjectUBO),
 		};
 	std::vector<vk::DescriptorImageInfo> texture_writes;
-	texture_writes.reserve(materials.size() * 2);
+	texture_writes.reserve(per_material.size() * 2);
 
 	{
 		auto data = reinterpret_cast<GlobalUBO*>(per_frame.global_ubo.map());
@@ -340,7 +347,7 @@ void StaticMeshRenderer::render(std::size_t frame_index, vk::CommandBuffer cb, c
 	{
 		auto data = per_frame.material_ubos.map();
 
-		for (auto&[material, permat] : materials)
+		for (auto&[material, permat] : per_material)
 		{
 			auto mat = data + mubo_size * permat.index;
 
@@ -382,15 +389,18 @@ void StaticMeshRenderer::render(std::size_t frame_index, vk::CommandBuffer cb, c
 		per_frame.material_ubos.unmap();
 	}
 
-	if (static_meshes.size() > 0)
+	if (meshlet_count > 0)
 	{
 		auto data = per_frame.object_ubos.map();
 
-		for(auto& mesh : static_meshes)
+		for(auto&[_, m] : per_material)
 		{
-			std::memcpy(data, &mesh.ubo, sizeof(ObjectUBO));
-
-			data += oubo_size;
+			for (auto& dc : m.per_drawcall)
+			{
+				auto ubo = reinterpret_cast<ObjectUBO*>(data + dc.index * oubo_size);
+				ubo->model = dc.transform;
+				ubo->normal = transpose(inverse(dc.transform));
+			}
 		}
 
 		per_frame.object_ubos.unmap();
@@ -412,7 +422,7 @@ void StaticMeshRenderer::render(std::size_t frame_index, vk::CommandBuffer cb, c
 	cb.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout_.get(), 0, 1,
 		&per_frame.global.get(), 0, nullptr);
 
-	for (auto&[mat, permat] : materials)
+	for (auto&[mat, permat] : per_material)
 	{
 		uint32_t dyn_offset = permat.index * mubo_size;
 		cb.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout_.get(), 1, 1,
@@ -423,16 +433,14 @@ void StaticMeshRenderer::render(std::size_t frame_index, vk::CommandBuffer cb, c
 		auto buf = permat.model->vertex_buffer.get();
 		cb.bindVertexBuffers(0, 1, &buf, &offsets);
 
-		for (auto obj_idx : permat.objects)
+		for (auto perdc : permat.per_drawcall)
 		{
-			uint32_t dyn_off_obj = obj_idx * oubo_size;
+			uint32_t dyn_off_obj = perdc.index * oubo_size;
 			cb.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout_.get(), 2, 1,
 				&per_frame.object.get(), 1, &dyn_off_obj);
-
-			for (auto meshlet : permat.meshlets)
-			{
-				cb.drawIndexed(meshlet->index_count, 1, meshlet->index_offset, meshlet->vertex_offset, 0);
-			}
+			
+			cb.drawIndexed(perdc.meshlet->index_count, 1,
+				perdc.meshlet->index_offset, perdc.meshlet->vertex_offset, 0);
 		}
 	}
 }

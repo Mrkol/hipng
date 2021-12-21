@@ -1,5 +1,9 @@
 #include "rendering/gpu_storage/GpuStorageManager.hpp"
 
+#include <numeric>
+#include <stack>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <unifex/on.hpp>
 
 #include "core/EngineHandle.hpp"
@@ -11,6 +15,78 @@ GpuStorageManager::GpuStorageManager(CreateInfo info)
 	: device_{info.device}
 	, allocator_{info.allocator}
 {
+}
+
+std::vector<glm::mat4x4> GpuStorageManager::calculate_node_total_transforms(const tinygltf::Model& model)
+{
+	std::vector total_transforms = std::vector(model.nodes.size(), glm::identity<glm::mat4x4>());
+
+	for (std::size_t i = 0; i < model.nodes.size(); ++i)
+	{
+		auto& node = model.nodes[i];
+		auto& transform = total_transforms[i];
+
+		if (!node.matrix.empty())
+		{
+			for (int i = 0; i < 4; ++i)
+			{
+				for (int j = 0; j < 4; ++j)
+				{
+					transform[i][j] = static_cast<float>(node.matrix[4*j + i]);
+				}
+			}
+		}
+		else
+		{
+			if (!node.scale.empty())
+			{
+				transform = scale(transform, glm::vec3(
+					                  static_cast<float>(node.scale[0]),
+					                  static_cast<float>(node.scale[1]),
+					                  static_cast<float>(node.scale[2])
+				                  ));
+			}
+
+			if (!node.rotation.empty())
+			{
+				transform *= mat4_cast(glm::quat(
+					static_cast<float>(node.rotation[3]),
+					static_cast<float>(node.rotation[0]),
+					static_cast<float>(node.rotation[1]),
+					static_cast<float>(node.rotation[2])
+				));
+			}
+
+			if (!node.translation.empty())
+			{
+				transform = translate(transform, glm::vec3(
+					                      static_cast<float>(node.translation[0]),
+					                      static_cast<float>(node.translation[1]),
+					                      static_cast<float>(node.translation[2])
+				                      ));
+			}
+		}
+	}
+	
+	std::stack<std::size_t> vertices;
+	for (auto vert : model.scenes[model.defaultScene].nodes)
+	{
+		vertices.push(vert);
+	}
+
+	while (!vertices.empty())
+	{
+		auto vert = vertices.top();
+		vertices.pop();
+
+		for (auto child : model.nodes[vert].children)
+		{
+			total_transforms[child] = total_transforms[vert] * total_transforms[child];
+			vertices.push(child);
+		}
+	}
+
+	return total_transforms;
 }
 
 unifex::task<void> GpuStorageManager::uploadStaticMesh(AssetHandle handle, const tinygltf::Model& model)
@@ -145,6 +221,9 @@ unifex::task<void> GpuStorageManager::uploadStaticMesh(AssetHandle handle, const
 		
 		uint32_t vertex_offset = 0;
 		uint32_t index_offset = 0;
+
+		std::unordered_map<const tinygltf::Primitive*, Meshlet> meshlet_templates;
+
 		for (auto& mesh : model.meshes)
 		{
 			for (auto& prim : mesh.primitives)
@@ -169,17 +248,36 @@ unifex::task<void> GpuStorageManager::uploadStaticMesh(AssetHandle handle, const
 				NG_ASSERT(position.count == normal.count);
 				NG_ASSERT(position.count == uv.count);
 
-				result.meshlets.emplace_back(Meshlet{
+				meshlet_templates.emplace(&prim, Meshlet{
 					.vertex_offset = vertex_offset,
 					.index_offset = index_offset,
 					.index_count = idx_count,
-					.material = &result.materials[prim.material]
+					.material = &result.materials[prim.material],
 				});
-
+				
 				index_offset += idx_count;
 				vertex_offset += vtx_count;
 			}
 		}
+
+		auto total_transforms = calculate_node_total_transforms(model);
+
+		for (std::size_t i = 0; i < model.nodes.size(); ++i)
+		{
+			auto mesh_idx = model.nodes[i].mesh;
+
+			if (mesh_idx < 0)
+			{
+				continue;
+			}
+
+			for (auto& prim : model.meshes[mesh_idx].primitives)
+			{
+				result.meshlets.emplace_back(meshlet_templates.at(&prim))
+					.local_transform = total_transforms[i];
+			}
+		}
+		
 
 		buffer_regions.reserve(2 * result.meshlets.size());
 		

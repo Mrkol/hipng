@@ -6,7 +6,7 @@
 
 struct StaticMeshPacket
 {
-	ObjectUBO ubo{};
+	glm::mat4x4 transform;
 	AssetHandle model;
 };
 

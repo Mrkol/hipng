@@ -36,7 +36,9 @@ public:
 	unifex::task<UploadResult> frameUpload(vk::CommandBuffer cb);
 
 	void frameUploadDone(UploadResult result);
-	
+
+private:
+	std::vector<glm::mat4x4> calculate_node_total_transforms(const tinygltf::Model& model);
 
 private:
 	vk::Device device_;
