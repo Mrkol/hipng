@@ -1,5 +1,11 @@
 #include "core/InputHandler.hpp"
 #include "core/GameplaySystem.hpp"
+#include "core/EngineHandle.hpp"
+#include "core/WindowSystem.hpp"
+#include <fstream>
+#include <unordered_set>
+#include <imgui.h>
+#include <yaml-cpp/yaml.h>
 
 
 std::unique_ptr<InputHandler> InputHandler::register_input_systems(flecs::world &world) {
@@ -53,7 +59,7 @@ std::unique_ptr<InputHandler> InputHandler::register_input_systems(flecs::world 
 }
 
 InputHandler::InputHandler(flecs::entity listens_tag) : listens_tag_(std::move(listens_tag)) {
-    AddAction("MoveLeft", {.key = GLFW_KEY_A});
+    /*AddAction("MoveLeft", {.key = GLFW_KEY_A});
     AddAction("MoveRight", {.key = GLFW_KEY_D});
     AddAxis("MoveForward", {.key = GLFW_KEY_W}, 1.);
     AddAxis("MoveForward", {.key = GLFW_KEY_S}, -1.);
@@ -64,7 +70,72 @@ InputHandler::InputHandler(flecs::entity listens_tag) : listens_tag_(std::move(l
     AddAxis("CameraY", InputAxis::MOUSE_Y, .3);
 
     AddAction("Exit", {.key = GLFW_KEY_ESCAPE});
-    AddAction("Exit", {.key = GLFW_KEY_Q, .ctrl = true, .alt = true});
+    AddAction("Exit", {.key = GLFW_KEY_Q, .ctrl = true, .alt = true});*/
+
+    LoadFromConfig(NG_PROJECT_BASEPATH"/engine/resources/config/input.yaml");
+}
+
+KeyStroke InputHandler::ParseKeyStroke(const std::string& key_stroke) {
+    std::vector<std::string> tokens;
+    {
+        std::string token;
+        std::istringstream tokenStream(key_stroke);
+        while (std::getline(tokenStream, token, '+')) {
+            tokens.push_back(token);
+        }
+    }
+
+    KeyStroke ks{};
+
+    {
+        auto key = tokens.at(tokens.size() - 1);
+        if (name_to_keyboard_key.contains(key)) {
+            ks.key = name_to_keyboard_key.at(key);
+            ks.key_type = KeyStroke::KeyType::KEYBOARD;
+        } else if (name_to_mouse_key.contains(key)) {
+            ks.key = name_to_mouse_key.at(key);
+            ks.key_type = KeyStroke::KeyType::MOUSE;
+        }
+    }
+
+    for (size_t i = 0; i < tokens.size() - 1; ++i) {
+        const auto& mod_key = tokens[i];
+        if (mod_key == "CTRL") {
+            ks.ctrl = true;
+        } else if (mod_key == "SHIFT") {
+            ks.shift = true;
+        } else if (mod_key == "ALT") {
+            ks.alt = true;
+        }
+    }
+
+    return ks;
+}
+
+void InputHandler::LoadFromConfig(const std::string &path) {
+    YAML::Node doc = YAML::LoadFile(path);
+    for (auto it = doc["actions"].begin(); it != doc["actions"].end(); ++it) {
+        auto name = it->first.as<std::string>();
+        if (it->second.IsScalar()) {
+            AddAction(name, ParseKeyStroke(it->second.as<std::string>()));
+        } else {
+            for (auto kss = it->second.begin(); kss != it->second.end(); ++kss) {
+                AddAction(name, ParseKeyStroke(kss->as<std::string>()));
+            }
+        }
+    }
+    for (auto it = doc["axes"].begin(); it != doc["axes"].end(); ++it) {
+        auto name = it->first.as<std::string>();
+        for (auto kss = it->second.begin(); kss != it->second.end(); ++kss) {
+            auto key_name = kss->first.as<std::string>();
+            auto value = kss->second.as<double>();
+            if (name_to_input_axis.contains(key_name)) {
+                AddAxis(name, name_to_input_axis.at(key_name), value);
+            } else {
+                AddAxis(name, ParseKeyStroke(key_name), value);
+            }
+        }
+    }
 }
 
 void InputHandler::Update() {

@@ -1,18 +1,12 @@
 #pragma once
 
-#include <map>
 #include <string>
 #include <GLFW/glfw3.h>
 #include <flecs.h>
 #include <vector>
-#include <variant>
-#include <set>
 #include <unordered_map>
 #include <array>
-#include <imgui.h>
-#include <unordered_set>
-#include "EngineHandle.hpp"
-#include "WindowSystem.hpp"
+#include <memory>
 
 
 struct InputActionState {
@@ -128,6 +122,8 @@ class InputHandler {
 
     flecs::entity listens_tag_;
 
+    static KeyStroke ParseKeyStroke(const std::string& key_stroke);
+
 
 public:
     static const std::unordered_map<std::string, int> name_to_keyboard_key;
@@ -151,9 +147,7 @@ public:
 
     void RebuildKeyStrokesHandler();
 
-    void LoadFromConfig(const std::string& path) {
-
-    }
+    void LoadFromConfig(const std::string& path);
 
     static std::unique_ptr<InputHandler> register_input_systems(flecs::world& world);
 };
