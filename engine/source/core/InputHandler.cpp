@@ -24,6 +24,11 @@ std::unique_ptr<InputHandler> InputHandler::register_input_systems(flecs::world 
             if (state.active)
                 pos.position += pos.rotation * glm::vec3(1, 0, 0) * e.delta_time();
         });
+    world.system<CPosition, InputAxisState>()
+        .arg(2).obj(world.entity("InputAxis_MoveUp_State"))
+        .each([](flecs::entity e, CPosition& pos, InputAxisState& axis) {
+            pos.position += pos.rotation * glm::vec3(0, 1, 0) * e.delta_time() * (float)axis.value;
+        });
     world.system<CPosition>()
         .term<InputAxisState>(world.entity("InputAxis_CameraX_State"))
         .term<InputAxisState>(world.entity("InputAxis_CameraY_State"))
@@ -33,9 +38,15 @@ std::unique_ptr<InputHandler> InputHandler::register_input_systems(flecs::world 
             auto x = iter.term<InputAxisState>(2);
             auto y = iter.term<InputAxisState>(3);
             for (auto i : iter) {
-                pos[i].rotation *= glm::angleAxis(y[i].value, glm::dvec3{-1., 0., 0.});
-                pos[i].rotation *= glm::angleAxis(x[i].value, glm::dvec3{0., -1., 0.});
+                glm::quat yaw = glm::angleAxis(glm::radians(x[i].value), glm::dvec3{0., -1., 0.});
+                glm::quat pitch = glm::angleAxis(glm::radians(y[i].value), glm::dvec3{-1., 0., 0.});
+                pos[i].rotation = yaw * pos[i].rotation * pitch;
             }
+        });
+
+    world.system().term(world.entity("InputAction_Exit_OnDeactivate"))
+        .iter([](flecs::iter iter) {
+            iter.world().quit();
         });
 
     return handler;
@@ -46,9 +57,14 @@ InputHandler::InputHandler(flecs::entity listens_tag) : listens_tag_(std::move(l
     AddAction("MoveRight", {.key = GLFW_KEY_D});
     AddAxis("MoveForward", {.key = GLFW_KEY_W}, 1.);
     AddAxis("MoveForward", {.key = GLFW_KEY_S}, -1.);
+    AddAxis("MoveUp", {.key = GLFW_KEY_SPACE}, 1.);
+    AddAxis("MoveUp", {.key = GLFW_KEY_LEFT_SHIFT}, -1.);
     AddAction("MouseLook", {.key = GLFW_MOUSE_BUTTON_RIGHT, .key_type = KeyStroke::KeyType::MOUSE});
-    AddAxis("CameraX", InputAxis::MOUSE_X, .01);
-    AddAxis("CameraY", InputAxis::MOUSE_Y, .01);
+    AddAxis("CameraX", InputAxis::MOUSE_X, .3);
+    AddAxis("CameraY", InputAxis::MOUSE_Y, .3);
+
+    AddAction("Exit", {.key = GLFW_KEY_ESCAPE});
+    AddAction("Exit", {.key = GLFW_KEY_Q, .ctrl = true, .alt = true});
 }
 
 void InputHandler::Update() {
