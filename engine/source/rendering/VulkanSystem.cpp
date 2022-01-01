@@ -83,19 +83,15 @@ std::unique_ptr<RenderingSubsystem> register_vulkan_systems(flecs::world& world,
                     vk::ObjectDestroy<vk::Instance, VULKAN_HPP_DEFAULT_DISPATCHER_TYPE>{renderingSystem->getInstance()}
                 };
 
-
-            // TODO: replace with asyncThisFrame.
-            // Right now this won't work, as TRequiresVulkan gets added from this init system :(
-            unifex::sync_wait(
-                [renderingSystem, surface = std::move(unique_surface),
-					window = window.glfw_window.get(),
-					gui_context = window.imgui_context.get()] // NOLINT
-                () mutable
+            auto deferred_window_create =
+                [] // NOLINT
+                (flecs::entity entity, RenderingSubsystem* rendering_system,
+                    GLFWwindow* window, ImGuiContext* gui_context, vk::UniqueSurfaceKHR surface)
                     -> unifex::task<void>
                 {
                     co_await unifex::schedule(g_engine.mainScheduler());
 
-                    co_await renderingSystem->makeVkWindow(
+                    co_await rendering_system->makeVkWindow(
                             std::move(surface),
                             [window]() // NOLINT
                                     -> unifex::task<vk::Extent2D>
@@ -115,10 +111,18 @@ std::unique_ptr<RenderingSubsystem> register_vulkan_systems(flecs::world& world,
 							gui_context
                     );
 
+                    co_await unifex::schedule(g_engine.nextFrameScheduler());
+
+                    entity.add<THasGui>();
+
                     co_return;
-                }());
+                };
 
             (void) e.remove<TRequiresVulkan>();
+
+            g_engine.async(deferred_window_create(e, renderingSystem,
+                window.glfw_window.get(), window.imgui_context.get(), std::move(unique_surface)));
+
         });
 
     return result;

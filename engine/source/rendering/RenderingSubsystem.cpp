@@ -146,18 +146,15 @@ RenderingSubsystem::RenderingSubsystem(CreateInfo info)
 		});
 }
 
-unifex::task<Window*> RenderingSubsystem::makeVkWindow(vk::UniqueSurfaceKHR surface,
+unifex::task<void> RenderingSubsystem::makeVkWindow(vk::UniqueSurfaceKHR surface,
     ResolutionProvider resolution_provider, ImGuiContext* gui_context)
 {
-    co_await frame_mutex_.async_lock();
-    Defer defer{[this]() { frame_mutex_.unlock(); }};
-
     NG_VERIFYF(
             physical_device_.getSurfaceSupportKHR(graphics_queue_idx_, surface.get()),
             "Some windows can't use the chosen graphics queue for presentation!"
         );
 
-    auto result = windows_.emplace_back(std::make_unique<Window>(Window::CreateInfo{
+    auto window = std::make_unique<Window>(Window::CreateInfo{
             .physical_device = physical_device_,
             .device = device_.get(),
             .allocator = allocator_.get(),
@@ -165,10 +162,10 @@ unifex::task<Window*> RenderingSubsystem::makeVkWindow(vk::UniqueSurfaceKHR surf
             .resolution_provider = std::move(resolution_provider),
 			.present_queue = device_->getQueue(graphics_queue_idx_, 0),
             .queue_family = graphics_queue_idx_,
-        })).get();
+        });
 
     // TODO: REMOVE THIS KOSTYL
-    auto renderer = renderers_.emplace_back(new TempForwardRenderer(
+    auto renderer = std::make_unique<TempForwardRenderer>(
             TempForwardRenderer::CreateInfo{
 				.instance = instance_.get(),
 				.physical_device = physical_device_,
@@ -182,17 +179,24 @@ unifex::task<Window*> RenderingSubsystem::makeVkWindow(vk::UniqueSurfaceKHR surf
                 .queue_family = graphics_queue_idx_,
 				.storage_manager = gpu_storage_manager_.get(),
 				.gui_context = gui_context,
-            })).get();
+            });
 
-    window_renderer_mapping_.emplace(result, renderer);
-
-    auto res = co_await result->recreateSwapchain();
+    auto res = co_await window->recreateSwapchain();
     NG_VERIFY(res.has_value());
-    auto imgs = result->getAllImages();
-    renderer->updatePresentationTarget(imgs, res.value());
-    result->markSwapchainRecreated();
+    auto imgs = window->getAllImages();
+    co_await renderer->updatePresentationTarget(imgs, res.value());
+    window->markSwapchainRecreated();
 
-    co_return result;
+    
+    
+    co_await frame_mutex_.async_lock();
+    Defer defer{[this]() { frame_mutex_.unlock(); }};
+
+    window_renderer_mapping_.emplace(window.get(), renderer.get());
+    windows_.emplace_back(std::move(window));
+    renderers_.emplace_back(std::move(renderer));
+
+    co_return;
 }
 
 VkBool32 RenderingSubsystem::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
@@ -230,9 +234,17 @@ unifex::task<void> RenderingSubsystem::renderFrame(std::size_t frame_index, Fram
 
     co_await frame_mutex_.async_lock(); // WARNING: this gets unlocked at a peculiar time, don't mess this up!!!
 
-    std::vector<std::optional<Window::SwapchainImage>> window_images;
-    window_images.reserve(windows_.size());
+    // copy shared state
+    std::vector<Window*> my_windows;
+    my_windows.reserve(windows_.size());
     for (auto& window : windows_)
+    {
+	    my_windows.emplace_back(window.get());
+    }
+
+    std::vector<std::optional<Window::SwapchainImage>> window_images;
+    window_images.reserve(my_windows.size());
+    for (auto& window : my_windows)
     {
         window_images.push_back(co_await window->acquireNext(frame_index));
     }
@@ -269,7 +281,7 @@ unifex::task<void> RenderingSubsystem::renderFrame(std::size_t frame_index, Fram
     {
         if (window_images[i].has_value())
         {
-            renderings_done.emplace_back(window_renderer_mapping_[windows_[i].get()]
+            renderings_done.emplace_back(window_renderer_mapping_[my_windows[i]]
                 ->render(frame_index, window_images[i]->view, window_images[i]->available, packet));
         }
         else
@@ -279,14 +291,14 @@ unifex::task<void> RenderingSubsystem::renderFrame(std::size_t frame_index, Fram
     }
 
 
-    for (std::size_t i = 0; i < windows_.size(); ++i)
+    for (std::size_t i = 0; i < my_windows.size(); ++i)
     {
         if (window_images[i].has_value())
         {
-            if (!windows_[i]->present(renderings_done[i].value().sem, window_images[i].value().view))
+            if (!my_windows[i]->present(renderings_done[i].value().sem, window_images[i].value().view))
             {
                 // TODO: This code is VERY BAD :(
-                windows_[i]->markImageFree(window_images[i].value().view);
+                my_windows[i]->markImageFree(window_images[i].value().view);
                 window_images[i] = std::nullopt;
             }
         }
@@ -328,28 +340,34 @@ unifex::task<void> RenderingSubsystem::renderFrame(std::size_t frame_index, Fram
 
     gpu_storage_manager_->frameUploadDone(std::move(uploads_done));
 
-    for (std::size_t i = 0; i < windows_.size(); ++i)
+    for (std::size_t i = 0; i < my_windows.size(); ++i)
     {
         if (window_images[i].has_value())
         {
-            windows_[i]->markImageFree(window_images[i].value().view);
+            my_windows[i]->markImageFree(window_images[i].value().view);
         }
     }
 
     // If any swapchains were out of date or suboptimal, recreate them.
-    for (std::size_t i = 0; i < windows_.size(); ++i)
+    for (std::size_t i = 0; i < my_windows.size(); ++i)
     {
         if (!window_images[i].has_value())
         {
             // This call is asynchronous, as it needs to wait for previous frames to finish presenting.
-            auto res = co_await windows_[i]->recreateSwapchain();
+            auto res = co_await my_windows[i]->recreateSwapchain();
             if (!res.has_value())
             {
                 continue;
             }
-            auto imgs = windows_[i]->getAllImages();
-            window_renderer_mapping_[windows_[i].get()]->updatePresentationTarget(imgs, res.value());
-            windows_[i]->markSwapchainRecreated();
+            g_engine.async(
+                [](Window* window, IRenderer* renderer, vk::Extent2D resolution)
+					-> unifex::task<void>
+	            {
+		            auto imgs = window->getAllImages();
+		            co_await renderer->updatePresentationTarget(imgs, resolution);
+		            window->markSwapchainRecreated();
+		            co_return;
+	            }(my_windows[i], window_renderer_mapping_[my_windows[i]], res.value()));
         }
     }
 

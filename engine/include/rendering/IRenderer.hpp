@@ -25,7 +25,7 @@ public:
      * @param target -- Views to swapchain images
      * @param resolution -- New resolution
      */
-    virtual void updatePresentationTarget(std::span<vk::ImageView> target, vk::Extent2D resolution) = 0;
+    virtual unifex::task<void> updatePresentationTarget(std::span<vk::ImageView> target, vk::Extent2D resolution) = 0;
 
     virtual ~IRenderer() = default;
 };

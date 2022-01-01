@@ -230,7 +230,7 @@ TempForwardRenderer::RenderingDone TempForwardRenderer::render(std::size_t frame
 	return {sem, fence};
 }
 
-void TempForwardRenderer::updatePresentationTarget(std::span<vk::ImageView> target, vk::Extent2D resolution)
+unifex::task<void> TempForwardRenderer::updatePresentationTarget(std::span<vk::ImageView> target, vk::Extent2D resolution)
 {
 	resolution_ = resolution;
 	framebuffer_.clear();
@@ -238,8 +238,8 @@ void TempForwardRenderer::updatePresentationTarget(std::span<vk::ImageView> targ
 	gui_manager_recreate_info_.swapchain_size = target.size();
 	gui_manager_.reset();
     gui_manager_ = std::make_unique<GuiManager>(gui_manager_recreate_info_);
-	storage_manager_->uploadGuiData(gui_context_);
 	
+	co_await storage_manager_->uploadGuiData(gui_context_);
 	
 	{
 		depth_buffer_ = UniqueVmaImage(allocator_, vk::Format::eD32Sfloat,
@@ -286,4 +286,6 @@ void TempForwardRenderer::updatePresentationTarget(std::span<vk::ImageView> targ
 				}
 			));
 	}
+
+	co_return;
 }

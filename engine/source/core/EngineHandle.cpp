@@ -18,10 +18,14 @@ BlockingThreadPool::Scheduler EngineHandle::blockingScheduler()
     return engine_->blocking_thread_pool_.get_scheduler();
 }
 
-void EngineHandle::asyncThisFrame(unifex::task<void> task)
+EventQueue::Scheduler EngineHandle::nextFrameScheduler()
 {
-    NG_ASSERTF(engine_->current_frame_scope_ != nullptr, "asyncThisFrame can only be called from a frame context!");
-    engine_->current_frame_scope_->spawn(std::move(task));
+    return engine_->next_frame_events_.get_scheduler();
+}
+
+void EngineHandle::async(unifex::any_sender_of<> task)
+{
+    engine_->global_scope_.spawn(std::move(task));
 }
 
 flecs::world& EngineHandle::world()

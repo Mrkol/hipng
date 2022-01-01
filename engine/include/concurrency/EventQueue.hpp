@@ -22,7 +22,7 @@ class EventQueue
         {
         }
 
-        void start()
+        void start() noexcept
         {
             queue.enqueue(this);
         }
@@ -77,6 +77,11 @@ public:
     private:
         EventQueue* queue_;
     };
+
+    Scheduler get_scheduler() noexcept
+    {
+	    return Scheduler(this);
+    }
 
     void executeAll()
     {

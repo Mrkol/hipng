@@ -83,19 +83,18 @@ unifex::task<int> Engine::mainEventLoop()
     AssetHandle fish{"engine/resources/fish/BarramundiFish.gltf"};
     AssetHandle lantern{"engine/resources/lantern/Lantern.gltf"};
     
-    unifex::async_scope global_scope;
     // LOADING STUFF FROM A DIFFERENT THREAD! POG!
     auto load =
-        [this, &global_scope](AssetHandle handle) -> unifex::task<void>
+        [this](AssetHandle handle) -> unifex::task<void>
         {
             auto model = co_await asset_subsystem_->loadModel(handle);
             co_await renderer_->getGpuStorageManager().uploadStaticMesh(handle, model);
             co_return;
         };
     
-    global_scope.spawn(load(avocado));
-    global_scope.spawn(load(fish));
-    global_scope.spawn(load(lantern));
+    global_scope_.spawn(load(avocado));
+    global_scope_.spawn(load(fish));
+    global_scope_.spawn(load(lantern));
 
     world_.entity("AVOCADINA")
         .set<CPosition>(CPosition{
@@ -139,9 +138,6 @@ unifex::task<int> Engine::mainEventLoop()
     {
         co_await os_polling_sender_;
 
-        unifex::async_scope frame_scope;
-        current_frame_scope_ = &frame_scope;
-
         ++current_frame_idx_;
 
         glfwPollEvents();
@@ -158,6 +154,8 @@ unifex::task<int> Engine::mainEventLoop()
         world_.component<CCurrentFramePacket>()
             .set(CCurrentFramePacket{&packet});
 
+        next_frame_events_.executeAll();
+
         should_quit |= !world_.progress(delta_seconds);
 
         world_.component<CCurrentFramePacket>()
@@ -166,13 +164,10 @@ unifex::task<int> Engine::mainEventLoop()
 
 
         co_await rendering_scope.spawn_next(renderer_->renderFrame(current_frame_idx_, std::move(packet)));
-
-        co_await unifex::on(g_engine.mainScheduler(), frame_scope.cleanup());
-        current_frame_scope_ = nullptr;
     }
 
     co_await rendering_scope.all_finished();
-    co_await unifex::on(g_engine.mainScheduler(), global_scope.cleanup());
+    co_await unifex::on(g_engine.mainScheduler(), global_scope_.cleanup());
 
     run_all(query_for_tag<TGameLoopFinished>(world_));
     

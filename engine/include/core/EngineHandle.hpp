@@ -3,8 +3,10 @@
 #include <flecs.h>
 #include <unifex/task.hpp>
 
+#include <unifex/any_sender_of.hpp>
 #include "concurrency/ThreadPool.hpp"
 #include "concurrency/BlockingThreadPool.hpp"
+#include "concurrency/EventQueue.hpp"
 
 
 class Engine;
@@ -42,11 +44,10 @@ public:
     BlockingThreadPool::Scheduler blockingScheduler();
 
 
-    /**
-     * Should ONLY get called from within a frame scope.
-     * Yes, this is dangerous and feels like a hack.
-     */
-    void asyncThisFrame(unifex::task<void> task);
+    EventQueue::Scheduler nextFrameScheduler();
+
+
+    void async(unifex::any_sender_of<> task);
 
 
     flecs::world& world();

@@ -1,6 +1,8 @@
 #include "core/Engine.hpp"
 #include "core/EnginePhases.hpp"
+#include "core/GameplaySystem.hpp"
 #include "core/WindowSystem.hpp"
+#include "rendering/ActorSystem.hpp"
 
 
 int main(int argc, char** argv)
@@ -24,11 +26,22 @@ int main(int argc, char** argv)
 
     engine.world().system<CWindow>()
 		.term<THasGui>()
-		.each([](CWindow& window)
+		.each([](flecs::entity e, CWindow& window)
 		{
 			ImGui::SetCurrentContext(window.imgui_context.get());
             ImGui::ShowDemoWindow();
 		});
+
+    /*
+    engine.world().system<CPosition, CStaticMeshActor>()
+		.each([](flecs::entity e, CPosition& pos, CStaticMeshActor&)
+		{
+			auto win = e.world().entity("MainWindow2");
+            if (win.has<THasGui>())
+            {
+	            
+            }
+		});*/
 
     return engine.run();
 }

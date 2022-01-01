@@ -40,7 +40,7 @@ public:
 	RenderingDone render(std::size_t frame_index, vk::ImageView present_image, vk::Semaphore image_available,
 		FramePacket& packet) override;
 
-	void updatePresentationTarget(std::span<vk::ImageView> target, vk::Extent2D resolution) override;
+	unifex::task<void> updatePresentationTarget(std::span<vk::ImageView> target, vk::Extent2D resolution) override;
 
 private:
 	vk::Device device_;

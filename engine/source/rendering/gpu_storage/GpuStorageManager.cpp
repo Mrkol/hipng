@@ -419,6 +419,8 @@ unifex::task<void> GpuStorageManager::uploadStaticMesh(AssetHandle handle, const
 	uploads_mtx_.unlock();
 
 	co_await unifex::on(g_engine.mainScheduler(), done.async_wait());
+	
+	co_return;
 }
 
 StaticMesh* GpuStorageManager::getStaticMesh(AssetHandle handle)
@@ -432,29 +434,27 @@ StaticMesh* GpuStorageManager::getStaticMesh(AssetHandle handle)
 	return &it->second;
 }
 
-void GpuStorageManager::uploadGuiData(ImGuiContext* context)
+unifex::task<void> GpuStorageManager::uploadGuiData(ImGuiContext* context)
 {
-	std::unique_lock lock {gui_uploads_mtx_};
-	gui_context_uploads_.push_back(context);
+	unifex::async_manual_reset_event evt;
+	{
+		co_await uploads_mtx_.async_lock();
+		Defer defer{[this](){ uploads_mtx_.unlock(); }};
+		gui_context_uploads_.push_back(context);
+		waiters_.emplace_back(&evt);
+	}
+
+	co_await unifex::on(g_engine.mainScheduler(), evt.async_wait());
+	
+	co_return;
 }
 
 unifex::task<GpuStorageManager::UploadResult> GpuStorageManager::frameUpload(vk::CommandBuffer cb)
 {
-	decltype(gui_context_uploads_) gui_context_uploads;
-	{
-		std::unique_lock lock {gui_uploads_mtx_};
-		gui_context_uploads = std::move(gui_context_uploads_);
-	}
-
-	for (auto context : gui_context_uploads)
-	{
-		ImGui::SetCurrentContext(context);
-		ImGui_ImplVulkan_CreateFontsTexture(cb);
-	}
-
 	decltype(buffer_uploads_) buffer_uploads;
 	decltype(image_uploads_) image_uploads;
 	decltype(static_mesh_uploads_) static_mesh_uploads;
+	decltype(gui_context_uploads_) gui_context_uploads;
 	decltype(waiters_) waiters;
 	{
 		co_await uploads_mtx_.async_lock();
@@ -464,15 +464,13 @@ unifex::task<GpuStorageManager::UploadResult> GpuStorageManager::frameUpload(vk:
 		image_uploads = std::move(image_uploads_);
 		static_mesh_uploads = std::move(static_mesh_uploads_);
 		waiters = std::move(waiters_);
-
-		if (buffer_uploads.empty() && image_uploads.empty())
-		{
-			for (auto waiter : waiters)
-			{
-				waiter->set();
-			}
-			co_return { .gui_contexts = gui_context_uploads };
-		}
+		gui_context_uploads = std::move(gui_context_uploads_);
+	}
+	
+	for (auto context : gui_context_uploads)
+	{
+		ImGui::SetCurrentContext(context);
+		ImGui_ImplVulkan_CreateFontsTexture(cb);
 	}
 
 	for (auto& buf : buffer_uploads)
@@ -502,6 +500,7 @@ unifex::task<GpuStorageManager::UploadResult> GpuStorageManager::frameUpload(vk:
 
 	}
 
+	if (!barriers.empty())
 	{
 		vk::DependencyInfoKHR dep{
 			.dependencyFlags = {},
@@ -538,6 +537,7 @@ unifex::task<GpuStorageManager::UploadResult> GpuStorageManager::frameUpload(vk:
 	    });
 	}
 
+	if (!barriers.empty())
 	{
 		vk::DependencyInfoKHR dep{
 			.dependencyFlags = {},

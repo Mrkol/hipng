@@ -37,10 +37,9 @@ public:
     [[nodiscard]] vk::Instance getInstance() const { return instance_.get(); }
 
     /**
-     * Even if a GLFW window was opened, it doesn't get to use our rendering system until a
-     * `Window` counterpart was created for it.
+     * Initializes a window for vulkan rendering usage.
      */
-    [[nodiscard]] unifex::task<Window*> makeVkWindow(vk::UniqueSurfaceKHR surface,
+    [[nodiscard]] unifex::task<void> makeVkWindow(vk::UniqueSurfaceKHR surface,
         ResolutionProvider resolution_provider, ImGuiContext* gui_context);
 
     [[nodiscard]] GpuStorageManager& getGpuStorageManager() { return *gpu_storage_manager_; }

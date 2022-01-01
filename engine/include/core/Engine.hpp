@@ -2,6 +2,7 @@
 
 #include <unifex/task.hpp>
 #include <unifex/async_scope.hpp>
+#include <unifex/manual_event_loop.hpp>
 #include <flecs.h>
 
 #include "rendering/RenderingSubsystem.hpp"
@@ -59,6 +60,9 @@ private:
     std::size_t current_frame_idx_{0};
     std::size_t inflight_frames_ {2}; // TODO: replace with a config
 
-    unifex::async_scope* current_frame_scope_{nullptr}; // TODO: should probably become atomic further down the line.
+    unifex::async_scope global_scope_;
+    // Hack: interaction with an OS window should only happen on the same thread
+    // where the shceduler was created. This sender sends a void from that thread.
     ThreadPool::Scheduler::Sender os_polling_sender_{};
+    EventQueue next_frame_events_;
 };
