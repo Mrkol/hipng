@@ -2,6 +2,7 @@
 #include "core/EnginePhases.hpp"
 #include "core/GameplaySystem.hpp"
 #include "core/WindowSystem.hpp"
+#include "rendering/GuiSystem.hpp"
 #include "rendering/ActorSystem.hpp"
 
 
@@ -9,14 +10,22 @@ int main(int argc, char** argv)
 {
     Engine engine(argc, argv);
 
+
+    g_engine.async(unifex::then(unifex::schedule(g_engine.nextFrameScheduler()),
+		[]()
+		{
+		    create_window(g_engine.world(), WindowCreateInfo{
+		            .name = "HipNg",
+		            .requiresVulkan = true,
+		            .requiresImgui = true,
+		            .mainWindow = true,
+		        });
+		}));
+
     engine.world().system<>()
         .kind(engine.world().component<TGameLoopStarting>())
         .iter([](flecs::iter it)
         {
-            it.world().entity("MainWindow")
-                .set<CWindow>(create_window("HipNg"))
-                .add<TMainWindow>()
-                .add<TRequiresVulkan>();
             
             /*it.world().entity("MainWindow2")
                 .set<CWindow>(create_window("HipNg"))
@@ -24,11 +33,10 @@ int main(int argc, char** argv)
                 .add<TRequiresVulkan>();*/
         });
 
-    engine.world().system<CWindow>()
-		.term<THasGui>()
-		.each([](flecs::entity e, CWindow& window)
+    engine.world().system<CGui>()
+		.each([](flecs::entity e, CGui& gui)
 		{
-			ImGui::SetCurrentContext(window.imgui_context.get());
+			ImGui::SetCurrentContext(gui.context.get());
             ImGui::ShowDemoWindow();
 		});
 

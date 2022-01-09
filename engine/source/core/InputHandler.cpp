@@ -181,7 +181,7 @@ void InputHandler::UpdateKeymaps() {
     static const std::vector<int> keyboard_ids = get_map_unique_values(name_to_keyboard_key);
     static const std::vector<int> mouse_ids = get_map_unique_values(name_to_mouse_key);
 
-    auto window_c = g_engine.world().entity("MainWindow").get<CWindow>();
+    auto window_c = g_engine.world().entity("HipNg").get<CWindow>();
     if (!window_c || !window_c->glfw_window) {
         spdlog::error("OOPSIE FUCKY WUCKY!! INPUT HANDLER FOUND NO WINDOW PLEASE FIXIE uWu");
         return;
@@ -241,7 +241,7 @@ void InputHandler::RebuildKeyStrokesHandler() {
 }
 
 void InputHandler::UpdateAxes() {
-    auto window_c = g_engine.world().entity("MainWindow").get<CWindow>();
+    auto window_c = g_engine.world().entity("HipNg").get<CWindow>();
     if (!window_c || !window_c->glfw_window) {
         spdlog::error("OOPSIE FUCKY WUCKY!! INPUT HANDLER FOUND NO WINDOW PLEASE FIXIE uWu");
         return;

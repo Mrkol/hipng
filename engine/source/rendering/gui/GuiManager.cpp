@@ -72,26 +72,29 @@ GuiManager::GuiManager(CreateInfo info)
     });
 
 
-    ImGui::SetCurrentContext(context_);
-    ImGui_ImplVulkan_InitInfo init_info{
-        .Instance = info.instance,
-        .PhysicalDevice = info.physical_device,
-        .Device = info.device,
-        .QueueFamily = info.graphics_queue_idx,
-        .Queue = info.graphics_queue,
-        .PipelineCache = VK_NULL_HANDLE,
-        .DescriptorPool = descriptor_pool_.get(),
-        .MinImageCount = 2,
-        .ImageCount = static_cast<uint32_t>(info.swapchain_size),
-        .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
-        .Allocator = nullptr,
-        .CheckVkResultFn = [](VkResult res)
-        {
-            NG_VERIFY(res == VK_SUCCESS);
-        },
-    };
+    if (context_ != nullptr)
+    {
+	    ImGui::SetCurrentContext(context_);
+	    ImGui_ImplVulkan_InitInfo init_info{
+	        .Instance = info.instance,
+	        .PhysicalDevice = info.physical_device,
+	        .Device = info.device,
+	        .QueueFamily = info.graphics_queue_idx,
+	        .Queue = info.graphics_queue,
+	        .PipelineCache = VK_NULL_HANDLE,
+	        .DescriptorPool = descriptor_pool_.get(),
+	        .MinImageCount = 2,
+	        .ImageCount = static_cast<uint32_t>(info.swapchain_size),
+	        .MSAASamples = VK_SAMPLE_COUNT_1_BIT,
+	        .Allocator = nullptr,
+	        .CheckVkResultFn = [](VkResult res)
+	        {
+	            NG_VERIFY(res == VK_SUCCESS);
+	        },
+	    };
 
-    ImGui_ImplVulkan_Init(&init_info, render_pass_.get());
+	    ImGui_ImplVulkan_Init(&init_info, render_pass_.get());
+    }
 }
 
 void GuiManager::render(vk::CommandBuffer cb, GuiFramePacket& packet)
@@ -101,6 +104,9 @@ void GuiManager::render(vk::CommandBuffer cb, GuiFramePacket& packet)
 
 GuiManager::~GuiManager()
 {
-    ImGui::SetCurrentContext(context_);
-    ImGui_ImplVulkan_Shutdown();
+    if (context_ != nullptr)
+    {
+	    ImGui::SetCurrentContext(context_);
+	    ImGui_ImplVulkan_Shutdown();
+    }
 }

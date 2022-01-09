@@ -6,6 +6,7 @@
 #include "core/DependencySystem.hpp"
 #include "core/WindowSystem.hpp"
 #include "rendering/Window.hpp"
+#include "rendering/GuiSystem.hpp"
 #include "util/Assert.hpp"
 
 
@@ -67,9 +68,9 @@ std::unique_ptr<RenderingSubsystem> register_vulkan_systems(flecs::world& world,
     world.set<CGlobalRendererRef>({result.get()});
     
 
-    world.observer<CWindow, const TRequiresVulkan>()
+    world.observer<CWindow, CUninitializedGui, const TRequiresVulkan>()
         .event(flecs::OnAdd)
-        .each([](flecs::entity e, CWindow& window, const TRequiresVulkan&)
+        .each([](flecs::entity e, CWindow& window, CUninitializedGui& gui, const TRequiresVulkan&)
         {
             auto* kek = e.world().get_mut<CGlobalRendererRef>();
             RenderingSubsystem* renderingSystem = kek->ref;
@@ -86,7 +87,7 @@ std::unique_ptr<RenderingSubsystem> register_vulkan_systems(flecs::world& world,
             auto deferred_window_create =
                 [] // NOLINT
                 (flecs::entity entity, RenderingSubsystem* rendering_system,
-                    GLFWwindow* window, ImGuiContext* gui_context, vk::UniqueSurfaceKHR surface)
+                    GLFWwindow* window, GuiContextHolder context, vk::UniqueSurfaceKHR surface)
                     -> unifex::task<void>
                 {
                     co_await unifex::schedule(g_engine.mainScheduler());
@@ -108,20 +109,32 @@ std::unique_ptr<RenderingSubsystem> register_vulkan_systems(flecs::world& world,
 
                                 co_return vk::Extent2D{static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
                             },
-							gui_context
+							context.get()
                     );
 
-                    co_await unifex::schedule(g_engine.nextFrameScheduler());
+                    if (context != nullptr)
+                    {
+	                    co_await unifex::schedule(g_engine.nextFrameScheduler());
 
-                    entity.add<THasGui>();
-
+	                    entity.set(CGui{ .context = std::move(context) });
+                    }
+                    
                     co_return;
                 };
 
             (void) e.remove<TRequiresVulkan>();
 
+            GuiContextHolder context = {nullptr, &ImGui::DestroyContext};
+
+            // TODO: make GUI optional (flecs problem)
+            //if (gui != nullptr)
+            {
+	            context = std::move(gui.context);
+                e.remove<CUninitializedGui>();
+            }
+
             g_engine.async(deferred_window_create(e, renderingSystem,
-                window.glfw_window.get(), window.imgui_context.get(), std::move(unique_surface)));
+                window.glfw_window.get(), std::move(context), std::move(unique_surface)));
 
         });
 

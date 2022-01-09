@@ -237,10 +237,13 @@ unifex::task<void> TempForwardRenderer::updatePresentationTarget(std::span<vk::I
 
 	gui_manager_recreate_info_.swapchain_size = target.size();
 	gui_manager_.reset();
-    gui_manager_ = std::make_unique<GuiManager>(gui_manager_recreate_info_);
-	
-	co_await storage_manager_->uploadGuiData(gui_context_);
-	
+	gui_manager_ = std::make_unique<GuiManager>(gui_manager_recreate_info_);
+
+	if (gui_context_)
+	{
+		co_await storage_manager_->uploadGuiData(gui_context_);
+	}
+    
 	{
 		depth_buffer_ = UniqueVmaImage(allocator_, vk::Format::eD32Sfloat,
 			resolution, vk::ImageTiling::eOptimal, vk::ImageUsageFlagBits::eDepthStencilAttachment, 

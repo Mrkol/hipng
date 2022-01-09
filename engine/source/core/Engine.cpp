@@ -15,6 +15,7 @@
 #include "core/DependencySystem.hpp"
 #include "core/GameplaySystem.hpp"
 #include "core/WindowSystem.hpp"
+#include "rendering/GuiSystem.hpp"
 #include "rendering/ActorSystem.hpp"
 #include "rendering/VulkanSystem.hpp"
 #include "rendering/FramePacket.hpp"
@@ -44,6 +45,7 @@ Engine::Engine(int argc, char** argv)
     g_engine = EngineHandle(this);
 
     register_dependency_systems(world_);
+    register_gui_systems(world_);
     renderer_ = register_vulkan_systems(world_, APP_NAME);
     register_window_systems(world_);
     register_actor_systems(world_);
