@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <vector>
 
 #include "assets/AssetHandle.hpp"
 #include "rendering/gui/GuiFramePacket.hpp"

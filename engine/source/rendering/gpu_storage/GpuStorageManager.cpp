@@ -134,7 +134,7 @@ unifex::task<void> GpuStorageManager::uploadStaticMesh(AssetHandle handle, const
 		{
 			return UniqueVmaImage(allocator_,
 				vk::Format::eR8G8B8A8Srgb,
-				vk::Extent2D(img.width, img.height),
+				vk::Extent2D{static_cast<uint32_t>(img.width), static_cast<uint32_t>(img.height)},
 				vk::ImageTiling::eLinear,
 				vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst,
 				VMA_MEMORY_USAGE_GPU_ONLY);

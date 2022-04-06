@@ -110,10 +110,8 @@ RenderingSubsystem::RenderingSubsystem(CreateInfo info)
                 .preferredLargeHeapBlockSize = {},
                 .pAllocationCallbacks = {},
                 .pDeviceMemoryCallbacks = {},
-                .frameInUseCount = static_cast<uint32_t>(g_engine.inflightFrames()),
                 .pHeapSizeLimit = {},
                 .pVulkanFunctions = {},
-                .pRecordSettings = {},
 
                 .instance = instance_.get(),
                 .vulkanApiVersion = VK_API_VERSION_1_2, // TODO: global constant for this

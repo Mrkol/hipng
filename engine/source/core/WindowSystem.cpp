@@ -1,5 +1,7 @@
 #include "core/WindowSystem.hpp"
 
+#include <string>
+
 
 flecs::entity create_window(flecs::world& world, WindowCreateInfo info)
 {
