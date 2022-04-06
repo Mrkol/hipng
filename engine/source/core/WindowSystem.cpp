@@ -33,6 +33,8 @@ flecs::entity create_window(flecs::world& world, WindowCreateInfo info)
     {
 	    entity.add<TRequiresVulkan>();
     }
+
+    return entity;
 }
 
 void register_window_systems(flecs::world& world)

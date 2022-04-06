@@ -46,7 +46,7 @@ template<typename... Ts>
 {
     spdlog::critical("Panicked at {}:{} ({})", loc.file_name(), loc.line(), loc.function_name());
     spdlog::critical(message, ts...);
-    std::terminate();
+    std::abort();
 }
 
 }
@@ -54,7 +54,7 @@ template<typename... Ts>
 #define NG_PANIC(msg, ...)                                                   \
     do                                                                       \
     {                                                                        \
-        detail::panic(NG_CURRENT_LOCATION, (msg), ##__VA_ARGS__); \
+        detail::panic(NG_CURRENT_LOCATION, (msg), ##__VA_ARGS__);            \
     } while (false)
 
 // TODO: logging, assert disabling, etc

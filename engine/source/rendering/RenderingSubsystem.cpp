@@ -61,6 +61,19 @@ RenderingSubsystem::RenderingSubsystem(CreateInfo info)
                 }
         };
 
+    {
+        const auto chain = physical_device_.getFeatures2<
+            vk::PhysicalDeviceFeatures2,
+            vk::PhysicalDeviceSynchronization2FeaturesKHR
+            >();
+
+        auto& features = chain.get<vk::PhysicalDeviceFeatures2>();
+        NG_VERIFY(features.features.geometryShader && features.features.tessellationShader);
+
+        auto& syncFeatures = chain.get<vk::PhysicalDeviceSynchronization2FeaturesKHR>();
+        NG_VERIFY(syncFeatures.synchronization2);
+    }
+
 
     // TODO: make this external and configurable somehow
     vk::PhysicalDeviceFeatures features {
@@ -205,20 +218,20 @@ VkBool32 RenderingSubsystem::debugCallback(VkDebugUtilsMessageSeverityFlagBitsEX
 
     if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
     {
-        spdlog::error(pCallbackData->pMessage);
+        spdlog::error("Vulkan: {}", pCallbackData->pMessage);
         DEBUG_BREAK();
     }
     else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
     {
-	    spdlog::warn(pCallbackData->pMessage);
+	    spdlog::warn("Vulkan: {}", pCallbackData->pMessage);
     }
     else if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
     {
-	    spdlog::info(pCallbackData->pMessage);
+	    spdlog::info("Vulkan: {}", pCallbackData->pMessage);
     }
     else
     {
-	    spdlog::trace(pCallbackData->pMessage);
+	    spdlog::trace("Vulkan: {}", pCallbackData->pMessage);
     }
 
     return VK_FALSE;

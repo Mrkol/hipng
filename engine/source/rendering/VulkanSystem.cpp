@@ -10,7 +10,7 @@
 #include "util/Assert.hpp"
 
 
-constexpr std::array VALIDATION_LAYERS {static_cast<const char*>("VK_LAYER_KHRONOS_validation")};
+constexpr std::array VALIDATION_LAYERS {"VK_LAYER_KHRONOS_validation", "VK_LAYER_KHRONOS_synchronization2"};
 
 template<std::size_t size>
 void check_validation_layers_support(const std::array<const char*, size>& validation_layers)
